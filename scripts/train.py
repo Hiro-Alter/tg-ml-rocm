@@ -9,6 +9,7 @@ import json
 import random
 import sys
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,8 @@ HISTORY_FIELDS = [
     "val_precision_macro",
     "val_recall_macro",
     "val_f1_macro",
+    "train_seconds",
+    "val_seconds",
     "epoch_seconds",
     "is_best",
 ]
@@ -62,7 +65,8 @@ def main() -> int:
     from hand_gesture_rocm.models import build_model, count_parameters
 
     seed = int(get_nested(config, "experiment.seed", 42))
-    set_seed(seed, torch, np)
+    deterministic = bool(get_nested(config, "experiment.deterministic", True))
+    set_seed(seed, torch, np, deterministic=deterministic)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     experiment_name = str(get_nested(config, "experiment.name", "experiment"))
@@ -78,6 +82,9 @@ def main() -> int:
 
     batch_size = int(get_nested(config, "data.batch_size", 32))
     num_workers = int(get_nested(config, "data.num_workers", 4))
+    pin_memory = bool(get_nested(config, "data.pin_memory", device.type == "cuda"))
+    persistent_workers = bool(get_nested(config, "data.persistent_workers", num_workers > 0))
+    prefetch_factor = get_nested(config, "data.prefetch_factor", 2 if num_workers > 0 else None)
     grayscale_to_rgb = bool(get_nested(config, "data.grayscale_to_rgb", True))
 
     train_dataset = build_image_folder(train_dir, train=True, grayscale_to_rgb=grayscale_to_rgb)
@@ -91,23 +98,28 @@ def main() -> int:
 
     generator = torch.Generator()
     generator.manual_seed(seed)
-    pin_memory = device.type == "cuda"
+    loader_kwargs = {
+        "num_workers": num_workers,
+        "pin_memory": pin_memory,
+        "worker_init_fn": seed_worker,
+    }
+    if num_workers > 0:
+        loader_kwargs["persistent_workers"] = persistent_workers
+        if prefetch_factor is not None:
+            loader_kwargs["prefetch_factor"] = int(prefetch_factor)
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        worker_init_fn=seed_worker,
         generator=generator,
+        **loader_kwargs,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        worker_init_fn=seed_worker,
+        **loader_kwargs,
     )
 
     architecture = str(get_nested(config, "model.architecture", "resnet18"))
@@ -122,6 +134,11 @@ def main() -> int:
 
     criterion = nn.CrossEntropyLoss()
     optimizer = build_optimizer(config, model)
+    amp_config = build_amp_config(config, device, torch)
+    scaler = torch.amp.GradScaler(
+        device.type,
+        enabled=amp_config["enabled"] and amp_config["grad_scaler"],
+    )
     epochs = int(get_nested(config, "training.epochs", 30))
     early_config = get_nested(config, "training.early_stopping", {}) or {}
     monitor_name = str(early_config.get("monitor", "val_loss"))
@@ -145,6 +162,23 @@ def main() -> int:
     print(f"Device: {device}")
     print(f"Model: {architecture} ({training_mode})")
     print(f"Samples: {len(train_dataset):,} train / {len(val_dataset):,} val")
+    print(
+        "DataLoader: "
+        f"batch_size={batch_size} num_workers={num_workers} pin_memory={pin_memory} "
+        f"persistent_workers={persistent_workers if num_workers > 0 else False} "
+        f"prefetch_factor={prefetch_factor if num_workers > 0 else None}"
+    )
+    print(
+        "Torch performance: "
+        f"deterministic={deterministic} "
+        f"cudnn_benchmark={getattr(torch.backends.cudnn, 'benchmark', None)} "
+        f"cudnn_deterministic={getattr(torch.backends.cudnn, 'deterministic', None)}"
+    )
+    print(
+        "Mixed precision: "
+        f"enabled={amp_config['enabled']} dtype={amp_config['dtype_name']} "
+        f"grad_scaler={amp_config['grad_scaler'] and scaler.is_enabled()}"
+    )
     print(f"Parameters: {count_parameters(model):,} total / {count_parameters(model, trainable_only=True):,} trainable")
     print(f"Outputs: {run_dir} and {checkpoint_dir}")
 
@@ -155,8 +189,12 @@ def main() -> int:
     for epoch in range(1, epochs + 1):
         epoch_start = time.perf_counter()
         epoch_learning_rate = current_learning_rate(optimizer)
-        train_stats = run_epoch(model, train_loader, criterion, device, torch, optimizer)
-        val_stats = run_epoch(model, val_loader, criterion, device, torch, optimizer=None)
+        train_start = time.perf_counter()
+        train_stats = run_epoch(model, train_loader, criterion, device, torch, optimizer, amp_config, scaler)
+        train_seconds = time.perf_counter() - train_start
+        val_start = time.perf_counter()
+        val_stats = run_epoch(model, val_loader, criterion, device, torch, optimizer=None, amp_config=amp_config)
+        val_seconds = time.perf_counter() - val_start
         final_epoch = epoch
         final_validation = val_stats
 
@@ -171,7 +209,16 @@ def main() -> int:
             epochs_without_improvement += 1
 
         epoch_seconds = time.perf_counter() - epoch_start
-        row = build_history_row(epoch, epoch_learning_rate, train_stats, val_stats, epoch_seconds, is_best)
+        row = build_history_row(
+            epoch,
+            epoch_learning_rate,
+            train_stats,
+            val_stats,
+            train_seconds,
+            val_seconds,
+            epoch_seconds,
+            is_best,
+        )
         history.append(row)
         write_history_csv(history_path, history)
         scheduler_step(scheduler, monitor_value)
@@ -199,7 +246,8 @@ def main() -> int:
             f"Epoch {epoch:03d}/{epochs:03d} "
             f"train_loss={row['train_loss']:.4f} val_loss={row['val_loss']:.4f} "
             f"val_acc={row['val_accuracy']:.4f} val_f1={row['val_f1_macro']:.4f} "
-            f"lr={row['learning_rate']:.6g}"
+            f"lr={row['learning_rate']:.6g} "
+            f"time={row['epoch_seconds']:.2f}s train={row['train_seconds']:.2f}s val={row['val_seconds']:.2f}s"
         )
 
         if epochs_without_improvement >= patience:
@@ -237,15 +285,15 @@ def main() -> int:
     return 0
 
 
-def set_seed(seed: int, torch_module, numpy_module) -> None:
+def set_seed(seed: int, torch_module, numpy_module, deterministic: bool = True) -> None:
     random.seed(seed)
     numpy_module.random.seed(seed)
     torch_module.manual_seed(seed)
     if torch_module.cuda.is_available():
         torch_module.cuda.manual_seed_all(seed)
     if hasattr(torch_module.backends, "cudnn"):
-        torch_module.backends.cudnn.benchmark = False
-        torch_module.backends.cudnn.deterministic = True
+        torch_module.backends.cudnn.benchmark = not deterministic
+        torch_module.backends.cudnn.deterministic = deterministic
 
 
 def seed_worker(worker_id: int) -> None:
@@ -301,6 +349,39 @@ def build_optimizer(config: dict[str, Any], model):
     return torch.optim.AdamW(parameters, lr=learning_rate, weight_decay=weight_decay)
 
 
+def build_amp_config(config: dict[str, Any], device, torch_module) -> dict[str, Any]:
+    raw_config = get_nested(config, "training.mixed_precision", False)
+    if isinstance(raw_config, dict):
+        requested = bool(raw_config.get("enabled", False))
+        dtype_name = str(raw_config.get("dtype", "float16")).lower()
+        grad_scaler = bool(raw_config.get("grad_scaler", dtype_name in {"float16", "fp16", "half"}))
+    else:
+        requested = bool(raw_config)
+        dtype_name = "float16"
+        grad_scaler = True
+
+    dtype_mapping = {
+        "float16": torch_module.float16,
+        "fp16": torch_module.float16,
+        "half": torch_module.float16,
+        "bfloat16": torch_module.bfloat16,
+        "bf16": torch_module.bfloat16,
+    }
+    if dtype_name not in dtype_mapping:
+        raise ValueError(f"Unsupported mixed precision dtype: {dtype_name}")
+
+    available = device.type == "cuda" and torch_module.amp.autocast_mode.is_autocast_available(device.type)
+    enabled = requested and available
+    return {
+        "requested": requested,
+        "enabled": enabled,
+        "available": available,
+        "dtype": dtype_mapping[dtype_name],
+        "dtype_name": dtype_name,
+        "grad_scaler": grad_scaler and dtype_mapping[dtype_name] == torch_module.float16,
+    }
+
+
 def build_scheduler(config: dict[str, Any], optimizer, epochs: int, monitor_mode: str):
     import torch
 
@@ -315,9 +396,19 @@ def build_scheduler(config: dict[str, Any], optimizer, epochs: int, monitor_mode
     raise ValueError(f"Unsupported scheduler: {scheduler_name}")
 
 
-def run_epoch(model, loader, criterion, device, torch_module, optimizer=None) -> dict[str, Any]:
+def run_epoch(
+    model,
+    loader,
+    criterion,
+    device,
+    torch_module,
+    optimizer=None,
+    amp_config: dict[str, Any] | None = None,
+    scaler=None,
+) -> dict[str, Any]:
     is_training = optimizer is not None
     model.train(is_training)
+    amp_config = amp_config or {"enabled": False, "dtype": None}
 
     total_loss = 0.0
     total_samples = 0
@@ -332,12 +423,23 @@ def run_epoch(model, loader, criterion, device, torch_module, optimizer=None) ->
             if is_training:
                 optimizer.zero_grad(set_to_none=True)
 
-            outputs = model(images)
-            loss = criterion(outputs, targets)
+            autocast_context = (
+                torch_module.amp.autocast(device_type=device.type, dtype=amp_config["dtype"], enabled=True)
+                if amp_config.get("enabled")
+                else nullcontext()
+            )
+            with autocast_context:
+                outputs = model(images)
+                loss = criterion(outputs, targets)
 
             if is_training:
-                loss.backward()
-                optimizer.step()
+                if scaler is not None and scaler.is_enabled():
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    optimizer.step()
 
             batch_size = targets.size(0)
             predictions = outputs.argmax(dim=1)
@@ -359,6 +461,8 @@ def build_history_row(
     learning_rate: float,
     train_stats: dict[str, Any],
     val_stats: dict[str, Any],
+    train_seconds: float,
+    val_seconds: float,
     epoch_seconds: float,
     is_best: bool,
 ) -> dict[str, Any]:
@@ -375,6 +479,8 @@ def build_history_row(
         "val_precision_macro": float(val_stats["precision_macro"]),
         "val_recall_macro": float(val_stats["recall_macro"]),
         "val_f1_macro": float(val_stats["f1_macro"]),
+        "train_seconds": float(train_seconds),
+        "val_seconds": float(val_seconds),
         "epoch_seconds": float(epoch_seconds),
         "is_best": bool(is_best),
     }
@@ -472,6 +578,10 @@ def build_metrics_json(
             "train_dir": get_nested(config, "data.train_dir"),
             "val_dir": get_nested(config, "data.val_dir"),
             "batch_size": get_nested(config, "data.batch_size"),
+            "num_workers": get_nested(config, "data.num_workers"),
+            "pin_memory": get_nested(config, "data.pin_memory"),
+            "persistent_workers": get_nested(config, "data.persistent_workers"),
+            "prefetch_factor": get_nested(config, "data.prefetch_factor"),
             "train_samples": train_samples,
             "val_samples": val_samples,
             "max_samples_per_class": get_nested(config, "data.max_samples_per_class"),
@@ -479,6 +589,10 @@ def build_metrics_json(
             "max_val_samples_per_class": get_nested(config, "data.max_val_samples_per_class"),
             "subset_seed": get_nested(config, "experiment.seed"),
             "subset_strategy": "stratified_random_per_class" if get_nested(config, "data.max_samples_per_class") is not None or get_nested(config, "data.max_train_samples_per_class") is not None or get_nested(config, "data.max_val_samples_per_class") is not None else "full_dataset",
+        },
+        "performance": {
+            "deterministic": get_nested(config, "experiment.deterministic", True),
+            "mixed_precision": get_nested(config, "training.mixed_precision", False),
         },
         "early_stopping": {
             "monitor": monitor_name,

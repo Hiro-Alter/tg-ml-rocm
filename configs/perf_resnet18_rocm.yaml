@@ -1,5 +1,5 @@
 experiment:
-  name: tuning_resnet18
+  name: perf_resnet18_rocm
   seed: 42
   deterministic: false
 
@@ -21,26 +21,21 @@ data:
   max_train_samples_per_class: 1000
   max_val_samples_per_class: 200
 
-tuning:
-  learning_rate:
-    - 0.001
-    - 0.0003
-    - 0.0001
-  weight_decay:
-    - 0.0001
-    - 0.00001
+training:
+  epochs: 3
   optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.00001
   scheduler: ReduceLROnPlateau
   mixed_precision:
     enabled: false
     dtype: float16
     grad_scaler: true
-  epochs_per_trial: 8
   early_stopping:
     monitor: val_loss
     mode: min
     patience: 3
 
 outputs:
-  run_dir: runs/tuning_resnet18
-  checkpoint_dir: checkpoints/tuning_resnet18
+  run_dir: runs/perf_resnet18_rocm
+  checkpoint_dir: checkpoints/perf_resnet18_rocm

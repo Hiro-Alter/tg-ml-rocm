@@ -2,8 +2,8 @@
 
 ## Fase actual
 
-Fase 4B parcial: tuning ResNet18 iniciado, cortado tras diagnostico de
-rendimiento.
+Fase 4.5 cerrada: diagnostico de rendimiento ROCm/DataLoader completado.
+Siguiente paso: retomar Fase 4 con tuning ResNet18 corregido.
 
 ## Implementado
 
@@ -30,9 +30,18 @@ rendimiento.
   clase usando `experiment.seed`:
   `data.max_samples_per_class`, `data.max_train_samples_per_class` y
   `data.max_val_samples_per_class`.
+- `scripts/train.py` registra `train_seconds`, `val_seconds` y
+  `epoch_seconds`, y permite configurar `data.pin_memory`,
+  `data.persistent_workers`, `data.prefetch_factor` y
+  `experiment.deterministic`.
+- `scripts/train.py` soporta AMP opcional con
+  `training.mixed_precision.enabled`, `dtype` y `grad_scaler`.
 - PyTorch ROCm instalado en `.venv`:
   `torch==2.11.0+rocm7.2`, `torchvision==0.26.0+rocm7.2` y
   `torchaudio==2.11.0+rocm7.2`.
+- Config diagnostica `configs/perf_resnet18_rocm.yaml`.
+- Script `scripts/perf_diagnostics.py` para matriz corta de rendimiento con
+  monitoreo CPU/RAM/GPU/VRAM/disco.
 
 ## Comandos funcionales
 
@@ -46,6 +55,7 @@ python scripts/export_model.py --checkpoint checkpoints/best_model.pth --format 
 python scripts/infer_image.py --checkpoint checkpoints/best_model.pth --image example.jpg
 python scripts/tune.py --config configs/tuning_resnet18.yaml --dry-run --max-trials 1
 python scripts/tune.py --config configs/tuning_resnet18.yaml
+python scripts/perf_diagnostics.py --config configs/perf_resnet18_rocm.yaml --dry-run
 ```
 
 ## Notas
@@ -73,6 +83,25 @@ python scripts/tune.py --config configs/tuning_resnet18.yaml
   `cuda:0` pasa.
 - Dentro del sandbox restringido no se expone `/dev/kfd`; para validar GPU se
   requiere ejecutar con acceso real al dispositivo.
+- `runs/perf_resnet18_rocm/perf_summary.csv` fue generado en modo `--dry-run`
+  con 60 trials planificados: batch size 32/64/128, num_workers 0/2/4/6/8 y
+  variantes `baseline`, `miopen_search`, `amp_fp16`, `miopen_amp_fp16`.
+- Diagnostico baseline FP32 ejecutado con acceso real a ROCm para 15 trials.
+  Mejor resultado por promedio de epocas 2-3:
+  batch 32, `num_workers=4`, 93.04 s/epoca, 128.98 img/s train+val,
+  GPU avg 96.24%, VRAM max ~2133 MB.
+- Diagnostico `miopen_search` ejecutado para 15 trials. Mejor resultado:
+  batch 32, `num_workers=6`, 93.17 s/epoca, 128.79 img/s train+val,
+  GPU avg 96.94%, VRAM max ~2211 MB. No mejora el baseline.
+- Se descartan mas trials AMP/MIOpen+AMP en esta fase: el autotuning MIOpen no
+  produjo mejora y la decision operativa ya es estable.
+- Politica predeterminada para retomar tuning ResNet18:
+  `baseline` FP32, sin variables MIOpen, sin AMP, `batch_size=32`,
+  `num_workers=4`, `pin_memory=true`, `persistent_workers=true`,
+  `prefetch_factor=2`, `experiment.deterministic=false`.
+- `cudnn.benchmark=True` se activa cuando `experiment.deterministic=false`;
+  para ROCm la prueba principal de convoluciones sigue siendo MIOpen
+  (`MIOPEN_FIND_MODE=NORMAL`).
 - `data/`, `dataset/`, `runs/` y `checkpoints/` permanecen ignorados por Git.
 
 ## Retomar proxima sesion
@@ -80,7 +109,9 @@ python scripts/tune.py --config configs/tuning_resnet18.yaml
 1. Leer `AGENTS.md`, `PROJECT_STATE.md` y `TODO.md`.
 2. No usar como definitivos los trials 1-2 existentes de
    `runs/tuning_resnet18`: fueron preliminares con subset deterministico.
-3. Reanudar tuning ResNet18 con el protocolo corregido:
+3. La fase 4.5 concluyo con esta politica predeterminada:
+   `baseline` FP32, batch 32, `num_workers=4`, sin MIOpen y sin AMP.
+4. Reanudar tuning ResNet18 con el protocolo corregido:
 
 ```bash
 source .venv/bin/activate
@@ -88,7 +119,13 @@ python scripts/check_rocm.py
 python scripts/tune.py --config configs/tuning_resnet18.yaml --rerun-existing --stop-on-failure
 ```
 
-4. La ejecucion debe hacerse con acceso real a ROCm `/dev/kfd`; dentro del
+5. Solo si se quiere repetir la matriz diagnostica completa de 60 trials:
+
+```bash
+python scripts/perf_diagnostics.py --config configs/perf_resnet18_rocm.yaml --yes --stop-on-failure
+```
+
+6. La ejecucion debe hacerse con acceso real a ROCm `/dev/kfd`; dentro del
    sandbox PyTorch no ve la GPU.
-5. Al terminar el grid, registrar en `EXPERIMENTS.md` los trials corregidos,
+7. Al terminar el grid, registrar en `EXPERIMENTS.md` los trials corregidos,
    elegir la mejor politica y luego aplicarla a MobileNetV3 Small.
