@@ -54,7 +54,7 @@ def main() -> int:
         import numpy as np
         import torch
         from torch import nn
-        from torch.utils.data import DataLoader
+        from torch.utils.data import DataLoader, Subset
     except ImportError as exc:
         raise SystemExit(f"Missing training dependency: {exc}") from exc
 
@@ -82,6 +82,12 @@ def main() -> int:
 
     train_dataset = build_image_folder(train_dir, train=True, grayscale_to_rgb=grayscale_to_rgb)
     val_dataset = build_image_folder(val_dir, train=False, grayscale_to_rgb=grayscale_to_rgb)
+
+    default_limit = get_nested(config, "data.max_samples_per_class")
+    train_limit = get_nested(config, "data.max_train_samples_per_class", default_limit)
+    val_limit = get_nested(config, "data.max_val_samples_per_class", default_limit)
+    train_dataset = limit_samples_per_class(train_dataset, train_limit, seed, Subset)
+    val_dataset = limit_samples_per_class(val_dataset, val_limit, seed + 1, Subset)
 
     generator = torch.Generator()
     generator.manual_seed(seed)
@@ -138,6 +144,7 @@ def main() -> int:
     print(f"Experiment: {experiment_name}")
     print(f"Device: {device}")
     print(f"Model: {architecture} ({training_mode})")
+    print(f"Samples: {len(train_dataset):,} train / {len(val_dataset):,} val")
     print(f"Parameters: {count_parameters(model):,} total / {count_parameters(model, trainable_only=True):,} trainable")
     print(f"Outputs: {run_dir} and {checkpoint_dir}")
 
@@ -215,6 +222,8 @@ def main() -> int:
         monitor_name=monitor_name,
         monitor_mode=monitor_mode,
         stopped_early=stopped_early,
+        train_samples=len(train_dataset),
+        val_samples=len(val_dataset),
         run_dir=run_dir,
         checkpoint_dir=checkpoint_dir,
         history_path=history_path,
@@ -248,6 +257,33 @@ def seed_worker(worker_id: int) -> None:
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
+
+
+def limit_samples_per_class(dataset, max_samples_per_class: Any, seed: int, subset_cls):
+    if max_samples_per_class is None:
+        return dataset
+
+    limit = int(max_samples_per_class)
+    if limit <= 0:
+        raise ValueError("data.max_samples_per_class must be greater than zero.")
+
+    indices_by_class = {class_index: [] for class_index in range(NUM_CLASSES)}
+    for index, target in enumerate(dataset.targets):
+        indices_by_class[target].append(index)
+
+    rng = random.Random(seed)
+    indices: list[int] = []
+    for class_index in range(NUM_CLASSES):
+        class_indices = indices_by_class[class_index]
+        if len(class_indices) < limit:
+            raise ValueError(
+                f"Class {CLASS_NAMES[class_index]} has {len(class_indices)} samples, "
+                f"cannot select {limit}."
+            )
+        rng.shuffle(class_indices)
+        indices.extend(class_indices[:limit])
+    rng.shuffle(indices)
+    return subset_cls(dataset, indices)
 
 
 def build_optimizer(config: dict[str, Any], model):
@@ -408,6 +444,8 @@ def build_metrics_json(
     monitor_name: str,
     monitor_mode: str,
     stopped_early: bool,
+    train_samples: int,
+    val_samples: int,
     run_dir: Path,
     checkpoint_dir: Path,
     history_path: Path,
@@ -434,6 +472,13 @@ def build_metrics_json(
             "train_dir": get_nested(config, "data.train_dir"),
             "val_dir": get_nested(config, "data.val_dir"),
             "batch_size": get_nested(config, "data.batch_size"),
+            "train_samples": train_samples,
+            "val_samples": val_samples,
+            "max_samples_per_class": get_nested(config, "data.max_samples_per_class"),
+            "max_train_samples_per_class": get_nested(config, "data.max_train_samples_per_class"),
+            "max_val_samples_per_class": get_nested(config, "data.max_val_samples_per_class"),
+            "subset_seed": get_nested(config, "experiment.seed"),
+            "subset_strategy": "stratified_random_per_class" if get_nested(config, "data.max_samples_per_class") is not None or get_nested(config, "data.max_train_samples_per_class") is not None or get_nested(config, "data.max_val_samples_per_class") is not None else "full_dataset",
         },
         "early_stopping": {
             "monitor": monitor_name,

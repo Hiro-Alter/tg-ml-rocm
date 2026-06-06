@@ -26,7 +26,14 @@
 
 ## Fase 4 - Tuning y comparacion
 
-- [ ] Implementar `scripts/tune.py`.
-- [ ] Ejecutar tuning limitado sobre ResNet18.
+- [x] Implementar `scripts/tune.py`.
+- [x] Documentar resultados reales parciales en `EXPERIMENTS.md`.
+- [x] Hacer el subset de tuning estratificado aleatorio y reproducible.
+- [x] Subir `batch_size` de tuning a 128.
+- [x] Probar throughput del tuning ResNet18 con `batch_size=128`.
+- [x] Probar throughput del tuning ResNet18 con `batch_size=32` y `64`.
+- [x] Restaurar `batch_size=32` por mejor throughput observado.
+- [ ] Repetir tuning ResNet18 corregido con `--rerun-existing`.
+- [ ] Completar tuning limitado sobre ResNet18.
 - [ ] Aplicar la mejor politica a MobileNetV3 Small.
-- [ ] Documentar resultados reales en `EXPERIMENTS.md`.
+- [ ] Documentar comparacion final en `EXPERIMENTS.md`.

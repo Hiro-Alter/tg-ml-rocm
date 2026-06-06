@@ -52,12 +52,12 @@ pip install -r requirements.txt
 ```
 
 En esta sesion se creo `.venv` con `virtualenv` porque el sistema no tiene
-`python3.12-venv`. Las dependencias auxiliares quedaron instaladas; PyTorch
-ROCm no pudo instalarse por falta de espacio libre durante la descarga.
+`python3.12-venv`. PyTorch ROCm 7.2 quedo instalado y verificado con
+`scripts/check_rocm.py`.
 
 ## Comandos objetivo
 
-Disponibles hasta Fase 2:
+Disponibles:
 
 ```bash
 python scripts/check_rocm.py
@@ -67,11 +67,6 @@ python scripts/evaluate.py --checkpoint checkpoints/best_model.pth --data data/t
 python scripts/plot_history.py --history runs/experiment/training_history.csv
 python scripts/export_model.py --checkpoint checkpoints/best_model.pth --format onnx
 python scripts/infer_image.py --checkpoint checkpoints/best_model.pth --image example.jpg
-```
-
-Pendientes para fases siguientes:
-
-```bash
 python scripts/tune.py --config configs/tuning_resnet18.yaml
 ```
 
