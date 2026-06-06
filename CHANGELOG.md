@@ -21,5 +21,6 @@
 - Se agrego generacion de graficas desde historial CSV.
 - Se agrego exportacion a `.pth`, TorchScript y ONNX.
 - Se agrego inferencia para una imagen individual.
-- Se creo `.venv` e instalaron dependencias auxiliares; PyTorch ROCm quedo
-  pendiente por espacio insuficiente en disco.
+- Se completo la instalacion de PyTorch ROCm 7.2 en `.venv`.
+- Se verifico PyTorch ROCm con una RX 9060 XT visible y asignacion de tensor en
+  `cuda:0`.

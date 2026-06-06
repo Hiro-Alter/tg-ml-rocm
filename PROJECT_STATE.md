@@ -2,7 +2,7 @@
 
 ## Fase actual
 
-Fase 3 completada.
+Fase 3 completada. Entorno listo para iniciar Fase 4.
 
 ## Implementado
 
@@ -23,6 +23,9 @@ Fase 3 completada.
 - Script `scripts/plot_history.py` para graficas desde `training_history.csv`.
 - Script `scripts/export_model.py` para `.pth`, TorchScript y ONNX.
 - Script `scripts/infer_image.py` para inferencia de una imagen.
+- PyTorch ROCm instalado en `.venv`:
+  `torch==2.11.0+rocm7.2`, `torchvision==0.26.0+rocm7.2` y
+  `torchaudio==2.11.0+rocm7.2`.
 
 ## Comandos funcionales
 
@@ -41,7 +44,9 @@ python scripts/infer_image.py --checkpoint checkpoints/best_model.pth --image ex
 - No se entrenaron modelos en esta sesion.
 - No se generaron checkpoints, metricas reales ni graficas porque no hay
   entrenamiento/checkpoint ejecutado todavia.
-- Se creo `.venv` con dependencias auxiliares instaladas.
-- PyTorch ROCm 7.2 no pudo instalarse: el wheel `torch` pesa cerca de 6.2 GB y
-  la instalacion fallo por espacio insuficiente en disco.
+- `scripts/check_rocm.py` verificado correctamente fuera del sandbox:
+  PyTorch ve 1 dispositivo `AMD Radeon RX 9060 XT` y la prueba de tensor en
+  `cuda:0` pasa.
+- Dentro del sandbox restringido no se expone `/dev/kfd`; para validar GPU se
+  requiere ejecutar con acceso real al dispositivo.
 - `data/`, `dataset/`, `runs/` y `checkpoints/` permanecen ignorados por Git.

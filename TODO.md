@@ -21,6 +21,8 @@
 - [x] Implementar `scripts/plot_history.py`.
 - [x] Implementar `scripts/export_model.py`.
 - [x] Implementar `scripts/infer_image.py`.
+- [x] Instalar PyTorch ROCm en `.venv`.
+- [x] Verificar PyTorch ROCm con `scripts/check_rocm.py`.
 
 ## Fase 4 - Tuning y comparacion
 
