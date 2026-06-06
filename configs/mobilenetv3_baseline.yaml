@@ -1,0 +1,31 @@
+experiment:
+  name: mobilenetv3_baseline
+  seed: 42
+
+model:
+  architecture: mobilenetv3_small
+  pretrained: true
+  training_mode: classifier_only
+
+data:
+  train_dir: data/train
+  val_dir: data/val
+  test_dir: data/test
+  batch_size: 32
+  num_workers: 4
+  grayscale_to_rgb: true
+
+training:
+  epochs: 30
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  scheduler: ReduceLROnPlateau
+  early_stopping:
+    monitor: val_loss
+    mode: min
+    patience: 7
+
+outputs:
+  run_dir: runs/mobilenetv3_baseline
+  checkpoint_dir: checkpoints/mobilenetv3_baseline

@@ -1,0 +1,31 @@
+experiment:
+  name: resnet18_finetuning
+  seed: 42
+
+model:
+  architecture: resnet18
+  pretrained: true
+  training_mode: full_finetuning
+
+data:
+  train_dir: data/train
+  val_dir: data/val
+  test_dir: data/test
+  batch_size: 32
+  num_workers: 4
+  grayscale_to_rgb: true
+
+training:
+  epochs: 30
+  optimizer: AdamW
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  scheduler: ReduceLROnPlateau
+  early_stopping:
+    monitor: val_loss
+    mode: min
+    patience: 7
+
+outputs:
+  run_dir: runs/resnet18_finetuning
+  checkpoint_dir: checkpoints/resnet18_finetuning
