@@ -90,8 +90,8 @@
 - Se agrego `scripts/plot_final_results.py` para generar figuras finales desde
   historiales, metricas test y diagnostico ROCm/DataLoader existentes.
 - Se generaron figuras finales en `figures/final_results/` para entrenamiento,
-  comparacion test, matrices de confusion, tiempo de inferencia y rendimiento
-  ROCm/DataLoader.
+  tuning ResNet18, comparacion test, matrices de confusion, tiempo de
+  inferencia y rendimiento ROCm/DataLoader.
 - Las figuras conservan clases originales y metricas clave en ingles.
 - Las curvas de entrenamiento ahora anotan el valor de validacion en la mejor
   epoca para `Loss`, `Accuracy` y `F1 macro`.

@@ -69,9 +69,15 @@ def main() -> int:
 
     saved_paths.append(plot_inference_time(model_data, output_dir / "04_tiempo_inferencia.png"))
     saved_paths.append(
+        plot_tuning_resnet18(
+            args.runs_dir / "tuning_resnet18" / "tuning_summary.csv",
+            output_dir / "05_tuning_resnet18.png",
+        )
+    )
+    saved_paths.append(
         plot_rocm_dataloader(
             args.runs_dir / "perf_resnet18_rocm" / "perf_summary.csv",
-            output_dir / "05_diagnostico_rocm_dataloader.png",
+            output_dir / "06_diagnostico_rocm_dataloader.png",
         )
     )
 
@@ -278,6 +284,54 @@ def plot_inference_time(model_data: dict[str, dict], output_path: Path) -> Path:
     return output_path
 
 
+def plot_tuning_resnet18(summary_path: Path, output_path: Path) -> Path:
+    from matplotlib import pyplot as plt
+
+    rows = read_tuning_summary(summary_path)
+    if not rows:
+        raise ValueError(f"No hay trials completados en: {summary_path}")
+
+    best = min(rows, key=lambda row: row["best_val_loss"])
+    labels = [f"T{row['trial']}\nlr={format_float(row['learning_rate'])}\nwd={format_float(row['weight_decay'])}" for row in rows]
+    x = np.arange(len(rows))
+
+    figure, axes = plt.subplots(1, 2, figsize=(13, 4.8))
+
+    loss_values = [row["best_val_loss"] for row in rows]
+    colors = ["#d62728" if row["trial"] == best["trial"] else "#1f77b4" for row in rows]
+    bars = axes[0].bar(x, loss_values, color=colors)
+    axes[0].set_title("Best validation loss by trial")
+    axes[0].set_ylabel("val_loss")
+    axes[0].set_xticks(x, labels)
+    axes[0].set_ylim(0, max(loss_values) * 1.25)
+    add_bar_labels(axes[0], bars, decimals=4)
+
+    accuracy = [row["best_val_accuracy"] * 100 for row in rows]
+    f1_macro = [row["best_val_f1_macro"] * 100 for row in rows]
+    width = 0.36
+    axes[1].bar(x - width / 2, accuracy, width, label="val_accuracy", color="#2a9d8f")
+    bars_f1 = axes[1].bar(x + width / 2, f1_macro, width, label="val_f1_macro", color="#e9c46a")
+    axes[1].set_title("Best validation scores by trial")
+    axes[1].set_ylabel("Score (%)")
+    axes[1].set_xticks(x, labels)
+    axes[1].set_ylim(96.5, 99.0)
+    axes[1].legend()
+    add_bar_labels(axes[1], bars_f1, decimals=2, suffix="%")
+
+    for axis in axes:
+        axis.tick_params(axis="x", labelsize=8)
+
+    figure.suptitle(
+        f"ResNet18 tuning - selected trial T{best['trial']} "
+        f"(lr={format_float(best['learning_rate'])}, wd={format_float(best['weight_decay'])})",
+        y=1.04,
+    )
+    figure.tight_layout()
+    figure.savefig(output_path, bbox_inches="tight")
+    plt.close(figure)
+    return output_path
+
+
 def plot_rocm_dataloader(summary_path: Path, output_path: Path) -> Path:
     from matplotlib import pyplot as plt
 
@@ -370,6 +424,31 @@ def read_perf_summary(path: Path) -> list[dict]:
                 }
             )
     return rows
+
+
+def read_tuning_summary(path: Path) -> list[dict]:
+    if not path.exists():
+        raise FileNotFoundError(f"No existe el resumen de tuning: {path}")
+    rows = []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            if row["status"] != "completed":
+                continue
+            rows.append(
+                {
+                    "trial": int(row["trial"]),
+                    "learning_rate": float(row["learning_rate"]),
+                    "weight_decay": float(row["weight_decay"]),
+                    "best_val_loss": float(row["best_val_loss"]),
+                    "best_val_accuracy": float(row["best_val_accuracy"]),
+                    "best_val_f1_macro": float(row["best_val_f1_macro"]),
+                }
+            )
+    return rows
+
+
+def format_float(value: float) -> str:
+    return f"{value:.0e}" if value < 0.001 else f"{value:g}"
 
 
 def add_bar_labels(axis, bars, decimals: int = 2, suffix: str = "") -> None:

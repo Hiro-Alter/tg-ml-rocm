@@ -100,6 +100,7 @@ python scripts/tune.py --config configs/tuning_resnet18.yaml
 `scripts/plot_final_results.py` guarda en `figures/final_results/`:
 
 - curvas de entrenamiento finales
+- comparacion de tuning ResNet18
 - comparacion de metricas test
 - matrices de confusion normalizadas
 - tiempo medio de inferencia
