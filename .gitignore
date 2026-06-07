@@ -17,3 +17,13 @@ mlruns/
 *.engine
 
 .DS_Store
+
+# Internal agent/project continuity notes
+AGENTS.md
+PROJECT_STATE.md
+TODO.md
+
+# Thesis draft/analysis documents kept local
+FINAL_TRAINING_ANALYSIS.md
+FINAL_TEST_EVALUATION_ANALYSIS.md
+PERFORMANCE_DIAGNOSTIC_PHASE_4_5.md
