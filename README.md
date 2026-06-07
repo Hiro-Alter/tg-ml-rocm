@@ -5,8 +5,8 @@ para direccionamiento de un dron virtual.
 
 ## Estado
 
-Fase 3 implementada: entrenamiento, evaluacion, graficas, exportacion e
-inferencia individual desde linea de comandos.
+Fase final implementada: entrenamiento, evaluacion, graficas finales,
+exportacion portable e inferencia individual desde linea de comandos.
 
 ## Clases
 
@@ -63,17 +63,17 @@ Disponibles:
 python scripts/check_rocm.py
 python scripts/train.py --config configs/resnet18_finetuning.yaml
 python scripts/train.py --config configs/mobilenetv3_finetuning.yaml
-python scripts/evaluate.py --checkpoint checkpoints/best_model.pth --data data/test
-python scripts/plot_history.py --history runs/experiment/training_history.csv
-python scripts/export_model.py --checkpoint checkpoints/best_model.pth --format onnx
-python scripts/infer_image.py --checkpoint checkpoints/best_model.pth --image example.jpg
+python scripts/evaluate.py --checkpoint checkpoints/resnet18_two_stage/best_model.pth --data data/test
+python scripts/plot_final_results.py
+python scripts/export_portable_models.py
+python scripts/infer_image.py --checkpoint checkpoints/resnet18_two_stage/best_model.pth --image example.jpg
 python scripts/tune.py --config configs/tuning_resnet18.yaml
 ```
 
 ## Protocolo experimental breve
 
 1. Usar pesos preentrenados en ImageNet para ResNet18 y MobileNetV3 Small.
-2. Entrenar en modo `classifier_only` y `full_finetuning`.
+2. Entrenar en dos etapas: `classifier_only` y `partial_finetuning`.
 3. Ajustar de forma limitada `learning_rate` y `weight_decay`, principalmente
    sobre ResNet18.
 4. Aplicar la mejor politica a MobileNetV3 Small para comparacion final.
@@ -88,7 +88,7 @@ python scripts/tune.py --config configs/tuning_resnet18.yaml
 - `checkpoints/<experimento>/best_model.pth`
 - `checkpoints/<experimento>/last_model.pth`
 
-## Salidas de evaluacion y exportacion
+## Salidas de evaluacion, graficas y exportacion
 
 `scripts/evaluate.py` guarda en `evaluation/`:
 
@@ -97,14 +97,17 @@ python scripts/tune.py --config configs/tuning_resnet18.yaml
 - `confusion_matrix.csv`
 - `confusion_matrix.png`
 
-`scripts/plot_history.py` guarda en `plots/`:
+`scripts/plot_final_results.py` guarda en `figures/final_results/`:
 
-- `loss.png`
-- `accuracy.png`
-- `f1_macro.png`
+- curvas de entrenamiento finales
+- comparacion de metricas test
+- matrices de confusion normalizadas
+- tiempo medio de inferencia
+- diagnostico ROCm/DataLoader
 
-`scripts/export_model.py` guarda en `exports/`:
+`scripts/export_portable_models.py` guarda en `models/`:
 
-- `model.pth`
+- `model_state_dict.pth`
 - `model_torchscript.pt`
 - `model.onnx`
+- `metadata.json`, `labels.txt` y `manifest.json`

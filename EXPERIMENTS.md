@@ -36,7 +36,8 @@ Observaciones:
 
 ## 2026-06-06 - Probe batch size ResNet18
 
-- Config temporal: `runs/probe_configs/resnet18_batch128_epoch1.yaml`.
+- Config temporal local, eliminada en la depuracion final:
+  `runs/probe_configs/resnet18_batch128_epoch1.yaml`.
 - Modelo: ResNet18, `full_finetuning`, 1 epoca, `lr=0.001`,
   `weight_decay=0.0001`.
 - Dataset efectivo: 10,000 train y 2,000 val con subset estratificado

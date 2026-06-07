@@ -99,3 +99,7 @@
   finales a `models/` en TorchScript, ONNX y `state_dict` con metadata.
 - Se generaron exportaciones locales para ResNet18 y MobileNetV3 Small con
   `metadata.json`, `labels.txt` y `manifest.json`.
+- Se depuro codigo no usado: se eliminaron `scripts/export_model.py`,
+  `scripts/plot_history.py` y configs baseline iniciales.
+- Se limpiaron artefactos locales de probes, conservando tuning ResNet18 y
+  diagnostico `perf_resnet18_rocm`.
