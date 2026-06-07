@@ -201,3 +201,29 @@ Observaciones:
   `val_f1_macro=0.9961`, con `val_loss=0.0162`.
 - Falta evaluar este checkpoint sobre `data/test`; las metricas anteriores son
   de validacion, no de test.
+
+## 2026-06-07 - Evaluacion final sobre test
+
+- Dataset: `data/test`.
+- ResNet18 checkpoint:
+  `checkpoints/resnet18_two_stage/best_model.pth`.
+- MobileNetV3 Small checkpoint:
+  `checkpoints/mobilenetv3_two_stage/best_model.pth`.
+
+| Modelo | Test loss | Test acc | Test F1 macro | Parametros | Inferencia ms/img |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ResNet18 | 0.0139 | 0.9971 | 0.9971 | 11,181,642 | 2.8845 |
+| MobileNetV3 Small | 0.0215 | 0.9945 | 0.9945 | 1,528,106 | 0.4298 |
+
+Observaciones:
+
+- ResNet18 obtuvo la mejor exactitud y F1 macro en test.
+- MobileNetV3 Small tuvo menor rendimiento, pero fue aproximadamente 6.7 veces
+  mas rapido por imagen en inferencia y usa cerca de 13.7% de los parametros de
+  ResNet18.
+- Salidas ResNet18:
+  `runs/resnet18_two_stage/test_evaluation/metrics.json`,
+  `confusion_matrix.csv`, `confusion_matrix.png`, `per_class_metrics.csv`.
+- Salidas MobileNetV3 Small:
+  `runs/mobilenetv3_two_stage/test_evaluation/metrics.json`,
+  `confusion_matrix.csv`, `confusion_matrix.png`, `per_class_metrics.csv`.

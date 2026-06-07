@@ -81,3 +81,6 @@
   `val_f1_macro=0.9956`.
 - Se completo `FINAL_TRAINING_ANALYSIS.md` con el analisis de MobileNetV3
   Small y comparacion de validacion frente a ResNet18.
+- Se evaluaron ResNet18 y MobileNetV3 Small finales sobre `data/test`.
+- Se agrego `FINAL_TEST_EVALUATION_ANALYSIS.md` con redaccion de tesis para
+  interpretar la evaluacion final sobre test.

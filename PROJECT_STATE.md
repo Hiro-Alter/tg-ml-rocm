@@ -2,8 +2,8 @@
 
 ## Fase actual
 
-Fase 4: ResNet18 y MobileNetV3 Small finales de dos etapas entrenados.
-Siguiente paso: evaluacion test de ambos modelos.
+Fase 4 completada: ResNet18 y MobileNetV3 Small entrenados y evaluados sobre
+test.
 
 ## Implementado
 
@@ -52,6 +52,8 @@ Siguiente paso: evaluacion test de ambos modelos.
   resultados y conclusion de la fase 4.5.
 - Documento `FINAL_TRAINING_ANALYSIS.md` con analisis del entrenamiento final
   de ResNet18 y MobileNetV3 Small.
+- Documento `FINAL_TEST_EVALUATION_ANALYSIS.md` con analisis de resultados
+  finales sobre test y comparacion ResNet18 vs MobileNetV3 Small.
 
 ## Comandos funcionales
 
@@ -108,6 +110,11 @@ python scripts/perf_diagnostics.py --config configs/perf_resnet18_rocm.yaml --dr
   completo: 231,900 train / 30,000 val. Mejor checkpoint en epoca 12:
   `val_loss=0.0156`, `val_accuracy=0.9956`, `val_f1_macro=0.9956`.
   Early stopping en `partial_finetuning` al llegar a epoca global 19.
+- Evaluacion test completada:
+  ResNet18 `test_loss=0.0139`, `test_accuracy=0.9971`,
+  `test_f1_macro=0.9971`, `avg_inference_ms_per_image=2.8845`.
+  MobileNetV3 Small `test_loss=0.0215`, `test_accuracy=0.9945`,
+  `test_f1_macro=0.9945`, `avg_inference_ms_per_image=0.4298`.
 - `scripts/tune.py --dry-run --max-trials 1` fue verificado; solo genero
   archivos ignorados bajo `runs/`.
 - `scripts/check_rocm.py` verificado correctamente fuera del sandbox:
@@ -143,16 +150,12 @@ python scripts/perf_diagnostics.py --config configs/perf_resnet18_rocm.yaml --dr
    `runs/tuning_resnet18`: fueron preliminares con subset deterministico.
 3. La fase 4.5 concluyo con esta politica predeterminada:
    `baseline` FP32, batch 32, `num_workers=4`, sin MIOpen y sin AMP.
-4. Evaluar ambos checkpoints finales sobre `data/test`:
+4. Fase 4 ya tiene evaluaciones test guardadas en:
 
 ```bash
-source .venv/bin/activate
-python scripts/check_rocm.py
-python scripts/evaluate.py --checkpoint checkpoints/resnet18_two_stage/best_model.pth --data data/test
-python scripts/evaluate.py --checkpoint checkpoints/mobilenetv3_two_stage/best_model.pth --data data/test
+runs/resnet18_two_stage/test_evaluation/
+runs/mobilenetv3_two_stage/test_evaluation/
 ```
 
 5. La ejecucion con GPU requiere acceso real a ROCm `/dev/kfd`; dentro del
    sandbox PyTorch no ve la GPU.
-6. Registrar los resultados test en `EXPERIMENTS.md`, `PROJECT_STATE.md`,
-   `TODO.md` y `CHANGELOG.md`.

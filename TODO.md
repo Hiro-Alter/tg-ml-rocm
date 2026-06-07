@@ -45,8 +45,9 @@
 - [x] Crear analisis formal del entrenamiento final ResNet18.
 - [x] Entrenar MobileNetV3 Small final con los hiperparametros ResNet18.
 - [x] Actualizar analisis formal con MobileNetV3 Small.
-- [ ] Evaluar ambos modelos sobre test.
-- [ ] Documentar comparacion final en `EXPERIMENTS.md`.
+- [x] Evaluar ambos modelos sobre test.
+- [x] Documentar comparacion final en `EXPERIMENTS.md`.
+- [x] Crear analisis formal de resultados test para tesis.
 
 ## Fase 4.5 - Diagnostico de rendimiento ROCm/DataLoader
 

@@ -1,0 +1,11 @@
+actual/predicted,dislike,fist,like,palm,peace,peace_inverted,rock,stop,two_up,two_up_inverted
+dislike,4999,0,1,0,0,0,0,0,0,0
+fist,1,4998,0,0,0,0,0,0,1,0
+like,0,1,4998,0,0,0,1,0,0,0
+palm,1,0,0,4980,1,0,0,18,0,0
+peace,0,0,0,1,4969,4,9,0,17,0
+peace_inverted,0,0,3,1,6,4974,0,0,0,16
+rock,0,1,1,0,5,2,4989,0,2,0
+stop,0,0,0,13,0,0,0,4986,1,0
+two_up,0,0,0,1,12,0,4,1,4977,5
+two_up_inverted,0,0,2,0,0,6,0,1,4,4987
