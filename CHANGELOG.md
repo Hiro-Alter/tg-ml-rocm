@@ -95,3 +95,7 @@
 - Las figuras conservan clases originales y metricas clave en ingles.
 - Las curvas de entrenamiento ahora anotan el valor de validacion en la mejor
   epoca para `Loss`, `Accuracy` y `F1 macro`.
+- Se agrego `scripts/export_portable_models.py` para exportar los modelos
+  finales a `models/` en TorchScript, ONNX y `state_dict` con metadata.
+- Se generaron exportaciones locales para ResNet18 y MobileNetV3 Small con
+  `metadata.json`, `labels.txt` y `manifest.json`.
