@@ -1,0 +1,543 @@
+{
+  "experiment": "mobilenetv3_two_stage",
+  "model": {
+    "architecture": "mobilenetv3_small",
+    "training_mode": "partial_finetuning",
+    "pretrained": true,
+    "num_classes": 10,
+    "parameters": 1528106,
+    "trainable_parameters": 1245738
+  },
+  "data": {
+    "class_names": [
+      "dislike",
+      "fist",
+      "like",
+      "palm",
+      "peace",
+      "peace_inverted",
+      "rock",
+      "stop",
+      "two_up",
+      "two_up_inverted"
+    ],
+    "image_size": 224,
+    "imagenet_mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "imagenet_std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "train_dir": "data/train",
+    "val_dir": "data/val",
+    "batch_size": 32,
+    "num_workers": 4,
+    "pin_memory": true,
+    "persistent_workers": true,
+    "prefetch_factor": 2,
+    "train_samples": 231900,
+    "val_samples": 30000,
+    "max_samples_per_class": null,
+    "max_train_samples_per_class": null,
+    "max_val_samples_per_class": null,
+    "subset_seed": 42,
+    "subset_strategy": "full_dataset"
+  },
+  "performance": {
+    "deterministic": false,
+    "mixed_precision": {
+      "enabled": false,
+      "dtype": "float16",
+      "grad_scaler": true
+    }
+  },
+  "training_protocol": [
+    {
+      "optimizer": "AdamW",
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "scheduler": "ReduceLROnPlateau",
+      "mixed_precision": {
+        "enabled": false,
+        "dtype": "float16",
+        "grad_scaler": true
+      },
+      "early_stopping": {
+        "monitor": "val_loss",
+        "mode": "min",
+        "patience": 7
+      },
+      "name": "classifier_only",
+      "training_mode": "classifier_only",
+      "epochs": 5,
+      "learning_rate_multiplier": 1.0
+    },
+    {
+      "optimizer": "AdamW",
+      "learning_rate": 0.0001,
+      "weight_decay": 0.0001,
+      "scheduler": "ReduceLROnPlateau",
+      "mixed_precision": {
+        "enabled": false,
+        "dtype": "float16",
+        "grad_scaler": true
+      },
+      "early_stopping": {
+        "monitor": "val_loss",
+        "mode": "min",
+        "patience": 7
+      },
+      "name": "partial_finetuning",
+      "training_mode": "partial_finetuning",
+      "epochs": 25,
+      "learning_rate_multiplier": 0.1
+    }
+  ],
+  "early_stopping": {
+    "monitor": "val_loss",
+    "mode": "min",
+    "stopped_early": true,
+    "stopped_stages": [
+      "partial_finetuning"
+    ]
+  },
+  "best_epoch": 12,
+  "best_score": 0.015632571070139354,
+  "best_validation_metrics": {
+    "accuracy": 0.9956333333333334,
+    "precision_macro": 0.9956381987437457,
+    "recall_macro": 0.9956333333333334,
+    "f1_macro": 0.9956322192945061,
+    "per_class": [
+      {
+        "class_id": 0,
+        "class_name": "dislike",
+        "precision": 0.9986671109630123,
+        "recall": 0.999,
+        "f1_score": 0.9988335277453757,
+        "support": 3000
+      },
+      {
+        "class_id": 1,
+        "class_name": "fist",
+        "precision": 0.9986671109630123,
+        "recall": 0.999,
+        "f1_score": 0.9988335277453757,
+        "support": 3000
+      },
+      {
+        "class_id": 2,
+        "class_name": "like",
+        "precision": 0.9996667777407531,
+        "recall": 1.0,
+        "f1_score": 0.9998333611064822,
+        "support": 3000
+      },
+      {
+        "class_id": 3,
+        "class_name": "palm",
+        "precision": 0.9966699966699967,
+        "recall": 0.9976666666666667,
+        "f1_score": 0.997168082625354,
+        "support": 3000
+      },
+      {
+        "class_id": 4,
+        "class_name": "peace",
+        "precision": 0.9926149714669352,
+        "recall": 0.9856666666666667,
+        "f1_score": 0.9891286168255562,
+        "support": 3000
+      },
+      {
+        "class_id": 5,
+        "class_name": "peace_inverted",
+        "precision": 0.9946702198534311,
+        "recall": 0.9953333333333333,
+        "f1_score": 0.9950016661112963,
+        "support": 3000
+      },
+      {
+        "class_id": 6,
+        "class_name": "rock",
+        "precision": 0.9966532797858099,
+        "recall": 0.9926666666666667,
+        "f1_score": 0.9946559786239145,
+        "support": 3000
+      },
+      {
+        "class_id": 7,
+        "class_name": "stop",
+        "precision": 0.9963296629963296,
+        "recall": 0.9953333333333333,
+        "f1_score": 0.9958312489578122,
+        "support": 3000
+      },
+      {
+        "class_id": 8,
+        "class_name": "two_up",
+        "precision": 0.9877726371447455,
+        "recall": 0.9963333333333333,
+        "f1_score": 0.9920345170925987,
+        "support": 3000
+      },
+      {
+        "class_id": 9,
+        "class_name": "two_up_inverted",
+        "precision": 0.9946702198534311,
+        "recall": 0.9953333333333333,
+        "f1_score": 0.9950016661112963,
+        "support": 3000
+      }
+    ],
+    "confusion_matrix": [
+      [
+        2997,
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        2997,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        3000,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2993,
+        1,
+        0,
+        0,
+        6,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        2957,
+        7,
+        10,
+        0,
+        25,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        3,
+        2986,
+        0,
+        0,
+        0,
+        11
+      ],
+      [
+        1,
+        1,
+        0,
+        0,
+        10,
+        0,
+        2978,
+        1,
+        9,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        10,
+        0,
+        0,
+        0,
+        2986,
+        1,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        7,
+        0,
+        0,
+        2,
+        2989,
+        2
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        9,
+        0,
+        2,
+        2,
+        2986
+      ]
+    ],
+    "support": 30000,
+    "loss": 0.015632571070139354
+  },
+  "final_epoch": 19,
+  "final_validation_metrics": {
+    "accuracy": 0.9960666666666667,
+    "precision_macro": 0.9960676111889516,
+    "recall_macro": 0.9960666666666667,
+    "f1_macro": 0.9960664001550988,
+    "per_class": [
+      {
+        "class_id": 0,
+        "class_name": "dislike",
+        "precision": 1.0,
+        "recall": 0.9983333333333333,
+        "f1_score": 0.9991659716430359,
+        "support": 3000
+      },
+      {
+        "class_id": 1,
+        "class_name": "fist",
+        "precision": 0.998335552596538,
+        "recall": 0.9996666666666667,
+        "f1_score": 0.9990006662225184,
+        "support": 3000
+      },
+      {
+        "class_id": 2,
+        "class_name": "like",
+        "precision": 0.9990006662225184,
+        "recall": 0.9996666666666667,
+        "f1_score": 0.9993335554815062,
+        "support": 3000
+      },
+      {
+        "class_id": 3,
+        "class_name": "palm",
+        "precision": 0.9979986657771848,
+        "recall": 0.9973333333333333,
+        "f1_score": 0.9976658886295431,
+        "support": 3000
+      },
+      {
+        "class_id": 4,
+        "class_name": "peace",
+        "precision": 0.9906385824139083,
+        "recall": 0.9876666666666667,
+        "f1_score": 0.9891503922550492,
+        "support": 3000
+      },
+      {
+        "class_id": 5,
+        "class_name": "peace_inverted",
+        "precision": 0.9953410981697172,
+        "recall": 0.997,
+        "f1_score": 0.9961698584512906,
+        "support": 3000
+      },
+      {
+        "class_id": 6,
+        "class_name": "rock",
+        "precision": 0.9956623289956623,
+        "recall": 0.9946666666666667,
+        "f1_score": 0.9951642487910622,
+        "support": 3000
+      },
+      {
+        "class_id": 7,
+        "class_name": "stop",
+        "precision": 0.9966666666666667,
+        "recall": 0.9966666666666667,
+        "f1_score": 0.9966666666666667,
+        "support": 3000
+      },
+      {
+        "class_id": 8,
+        "class_name": "two_up",
+        "precision": 0.9897009966777409,
+        "recall": 0.993,
+        "f1_score": 0.9913477537437605,
+        "support": 3000
+      },
+      {
+        "class_id": 9,
+        "class_name": "two_up_inverted",
+        "precision": 0.9973315543695798,
+        "recall": 0.9966666666666667,
+        "f1_score": 0.9969989996665555,
+        "support": 3000
+      }
+    ],
+    "confusion_matrix": [
+      [
+        2995,
+        3,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2999,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2999,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2992,
+        0,
+        0,
+        0,
+        8,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        2963,
+        7,
+        11,
+        0,
+        18,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        4,
+        2991,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        4,
+        0,
+        2984,
+        0,
+        10,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        6,
+        0,
+        0,
+        0,
+        2990,
+        3,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        19,
+        0,
+        1,
+        0,
+        2979,
+        1
+      ],
+      [
+        0,
+        0,
+        1,
+        0,
+        0,
+        7,
+        0,
+        2,
+        0,
+        2990
+      ]
+    ],
+    "support": 30000,
+    "loss": 0.016191532303099842
+  },
+  "outputs": {
+    "run_dir": "runs/mobilenetv3_two_stage",
+    "checkpoint_dir": "checkpoints/mobilenetv3_two_stage",
+    "history_path": "runs/mobilenetv3_two_stage/training_history.csv",
+    "metrics_path": "runs/mobilenetv3_two_stage/metrics.json",
+    "best_checkpoint_path": "checkpoints/mobilenetv3_two_stage/best_model.pth",
+    "last_checkpoint_path": "checkpoints/mobilenetv3_two_stage/last_model.pth"
+  }
+}

@@ -117,3 +117,87 @@ conviene activarlo como default con estos datos.
   `prefetch_factor=2` y `experiment.deterministic=false`.
 - Motivo: mejor tiempo observado en epocas 2-3 fue baseline batch 32 workers 4
   con 93.04 s/epoca y 128.98 img/s; MIOpen quedo practicamente igual o peor.
+
+## 2026-06-06 - Tuning ResNet18 dos etapas
+
+- Config: `configs/tuning_resnet18.yaml`.
+- Modelo: ResNet18, pesos ImageNet.
+- Protocolo por trial: `classifier_only` 3 epocas con `lr=learning_rate`,
+  luego `partial_finetuning` 5 epocas con `lr=learning_rate*0.1`.
+- En `partial_finetuning` se descongela `layer4` + `fc`.
+- Dataset efectivo: 10,000 train y 2,000 val con subset estratificado
+  aleatorio reproducible.
+- Tuning sin uso de test.
+- Seleccion: menor `val_loss` en la etapa final.
+
+| Trial | LR base | LR parcial | Weight decay | Mejor epoca | Val loss | Val acc | Val F1 macro |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.001 | 0.0001 | 0.0001 | 6 | 0.0604 | 0.9825 | 0.9826 |
+| 2 | 0.001 | 0.0001 | 0.00001 | 6 | 0.0604 | 0.9825 | 0.9826 |
+| 3 | 0.0003 | 0.00003 | 0.0001 | 8 | 0.0670 | 0.9815 | 0.9816 |
+| 4 | 0.0003 | 0.00003 | 0.00001 | 8 | 0.0670 | 0.9820 | 0.9821 |
+| 5 | 0.0001 | 0.00001 | 0.0001 | 8 | 0.1110 | 0.9750 | 0.9751 |
+| 6 | 0.0001 | 0.00001 | 0.00001 | 8 | 0.1110 | 0.9750 | 0.9751 |
+
+Resultado elegido:
+
+- Mejor trial por `val_loss`: trial 1.
+- Hiperparametros seleccionados para entrenamiento final:
+  `learning_rate=0.001`, `partial_finetuning lr=0.0001`,
+  `weight_decay=0.0001`, AdamW, ReduceLROnPlateau.
+- Trial 1 y trial 2 quedaron practicamente empatados; se conserva trial 1 por
+  tener el menor `val_loss` y mayor regularizacion por weight decay.
+
+## 2026-06-07 - Entrenamiento final ResNet18 dos etapas
+
+- Config: `configs/resnet18_finetuning.yaml`.
+- Modelo: ResNet18, pesos ImageNet.
+- Dataset efectivo: 231,900 train y 30,000 val.
+- Protocolo: `classifier_only` 5 epocas con `lr=0.001`, luego
+  `partial_finetuning` hasta 25 epocas con `lr=0.0001`.
+- En `partial_finetuning` se descongela `layer4` + `fc`.
+- Optimizador: AdamW. Scheduler: ReduceLROnPlateau.
+- Early stopping: `val_loss`, paciencia 7.
+
+Resultado:
+
+| Mejor epoca | Final epoca | Val loss | Val acc | Val F1 macro | Early stopping |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 15 | 22 | 0.0103 | 0.9975 | 0.9975 | si, en `partial_finetuning` |
+
+Observaciones:
+
+- El mejor checkpoint quedo en `checkpoints/resnet18_two_stage/best_model.pth`.
+- La validacion final en epoca 22 mantuvo `val_accuracy=0.9975` y
+  `val_f1_macro=0.9975`, con `val_loss=0.0116`.
+- Falta evaluar este checkpoint sobre `data/test`; las metricas anteriores son
+  de validacion, no de test.
+
+## 2026-06-07 - Entrenamiento final MobileNetV3 Small dos etapas
+
+- Config: `configs/mobilenetv3_finetuning.yaml`.
+- Modelo: MobileNetV3 Small, pesos ImageNet.
+- Dataset efectivo: 231,900 train y 30,000 val.
+- Protocolo: `classifier_only` 5 epocas con `lr=0.001`, luego
+  `partial_finetuning` hasta 25 epocas con `lr=0.0001`.
+- En `partial_finetuning` se descongela `classifier` + ultimos 3 bloques de
+  `features`.
+- Hiperparametros reutilizados del tuning ResNet18; no se hizo tuning separado
+  para MobileNetV3 Small.
+- Optimizador: AdamW. Scheduler: ReduceLROnPlateau.
+- Early stopping: `val_loss`, paciencia 7.
+
+Resultado:
+
+| Mejor epoca | Final epoca | Val loss | Val acc | Val F1 macro | Early stopping |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 12 | 19 | 0.0156 | 0.9956 | 0.9956 | si, en `partial_finetuning` |
+
+Observaciones:
+
+- El mejor checkpoint quedo en
+  `checkpoints/mobilenetv3_two_stage/best_model.pth`.
+- La validacion final en epoca 19 tuvo `val_accuracy=0.9961` y
+  `val_f1_macro=0.9961`, con `val_loss=0.0162`.
+- Falta evaluar este checkpoint sobre `data/test`; las metricas anteriores son
+  de validacion, no de test.

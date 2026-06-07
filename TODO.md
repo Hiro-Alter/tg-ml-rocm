@@ -33,9 +33,19 @@
 - [x] Probar throughput del tuning ResNet18 con `batch_size=128`.
 - [x] Probar throughput del tuning ResNet18 con `batch_size=32` y `64`.
 - [x] Restaurar `batch_size=32` por mejor throughput observado.
-- [ ] Repetir tuning ResNet18 corregido con `--rerun-existing`.
-- [ ] Completar tuning limitado sobre ResNet18.
-- [ ] Aplicar la mejor politica a MobileNetV3 Small.
+- [x] Agregar `partial_finetuning` para ResNet18 y MobileNetV3 Small.
+- [x] Cambiar tuning ResNet18 a protocolo `classifier_only` +
+  `partial_finetuning`.
+- [x] Evitar uso de test en config de tuning.
+- [x] Preparar configs finales de dos etapas para ResNet18 y MobileNetV3 Small.
+- [x] Ejecutar tuning ResNet18 corregido con `--rerun-existing`.
+- [x] Completar tuning limitado sobre ResNet18 con protocolo de dos etapas.
+- [x] Actualizar configs finales con los mejores hiperparametros ResNet18.
+- [x] Entrenar ResNet18 final en dataset completo.
+- [x] Crear analisis formal del entrenamiento final ResNet18.
+- [x] Entrenar MobileNetV3 Small final con los hiperparametros ResNet18.
+- [x] Actualizar analisis formal con MobileNetV3 Small.
+- [ ] Evaluar ambos modelos sobre test.
 - [ ] Documentar comparacion final en `EXPERIMENTS.md`.
 
 ## Fase 4.5 - Diagnostico de rendimiento ROCm/DataLoader
@@ -57,3 +67,4 @@
 - [x] Analizar epocas 2-3 y elegir batch/workers/variante.
 - [x] Registrar resultados baseline y MIOpen reales en `EXPERIMENTS.md`.
 - [x] Dejar `configs/tuning_resnet18.yaml` con la politica elegida.
+- [x] Crear resumen formal para tesis de la fase 4.5.

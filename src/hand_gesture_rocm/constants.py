@@ -20,4 +20,4 @@ IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
 SUPPORTED_MODELS = ("resnet18", "mobilenetv3_small")
-TRAINING_MODES = ("classifier_only", "full_finetuning")
+TRAINING_MODES = ("classifier_only", "partial_finetuning", "full_finetuning")

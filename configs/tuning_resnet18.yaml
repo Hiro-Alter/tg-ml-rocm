@@ -6,12 +6,11 @@ experiment:
 model:
   architecture: resnet18
   pretrained: true
-  training_mode: full_finetuning
+  training_mode: classifier_only
 
 data:
   train_dir: data/train
   val_dir: data/val
-  test_dir: data/test
   batch_size: 32
   num_workers: 4
   pin_memory: true
@@ -35,7 +34,15 @@ tuning:
     enabled: false
     dtype: float16
     grad_scaler: true
-  epochs_per_trial: 8
+  stages:
+    - name: classifier_only
+      training_mode: classifier_only
+      epochs: 3
+      learning_rate_multiplier: 1.0
+    - name: partial_finetuning
+      training_mode: partial_finetuning
+      epochs: 5
+      learning_rate_multiplier: 0.1
   early_stopping:
     monitor: val_loss
     mode: min

@@ -1,0 +1,543 @@
+{
+  "experiment": "resnet18_two_stage",
+  "model": {
+    "architecture": "resnet18",
+    "training_mode": "partial_finetuning",
+    "pretrained": true,
+    "num_classes": 10,
+    "parameters": 11181642,
+    "trainable_parameters": 8398858
+  },
+  "data": {
+    "class_names": [
+      "dislike",
+      "fist",
+      "like",
+      "palm",
+      "peace",
+      "peace_inverted",
+      "rock",
+      "stop",
+      "two_up",
+      "two_up_inverted"
+    ],
+    "image_size": 224,
+    "imagenet_mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "imagenet_std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "train_dir": "data/train",
+    "val_dir": "data/val",
+    "batch_size": 32,
+    "num_workers": 4,
+    "pin_memory": true,
+    "persistent_workers": true,
+    "prefetch_factor": 2,
+    "train_samples": 231900,
+    "val_samples": 30000,
+    "max_samples_per_class": null,
+    "max_train_samples_per_class": null,
+    "max_val_samples_per_class": null,
+    "subset_seed": 42,
+    "subset_strategy": "full_dataset"
+  },
+  "performance": {
+    "deterministic": false,
+    "mixed_precision": {
+      "enabled": false,
+      "dtype": "float16",
+      "grad_scaler": true
+    }
+  },
+  "training_protocol": [
+    {
+      "optimizer": "AdamW",
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "scheduler": "ReduceLROnPlateau",
+      "mixed_precision": {
+        "enabled": false,
+        "dtype": "float16",
+        "grad_scaler": true
+      },
+      "early_stopping": {
+        "monitor": "val_loss",
+        "mode": "min",
+        "patience": 7
+      },
+      "name": "classifier_only",
+      "training_mode": "classifier_only",
+      "epochs": 5,
+      "learning_rate_multiplier": 1.0
+    },
+    {
+      "optimizer": "AdamW",
+      "learning_rate": 0.0001,
+      "weight_decay": 0.0001,
+      "scheduler": "ReduceLROnPlateau",
+      "mixed_precision": {
+        "enabled": false,
+        "dtype": "float16",
+        "grad_scaler": true
+      },
+      "early_stopping": {
+        "monitor": "val_loss",
+        "mode": "min",
+        "patience": 7
+      },
+      "name": "partial_finetuning",
+      "training_mode": "partial_finetuning",
+      "epochs": 25,
+      "learning_rate_multiplier": 0.1
+    }
+  ],
+  "early_stopping": {
+    "monitor": "val_loss",
+    "mode": "min",
+    "stopped_early": true,
+    "stopped_stages": [
+      "partial_finetuning"
+    ]
+  },
+  "best_epoch": 15,
+  "best_score": 0.010302368496293682,
+  "best_validation_metrics": {
+    "accuracy": 0.9975,
+    "precision_macro": 0.9975025315466997,
+    "recall_macro": 0.9974999999999999,
+    "f1_macro": 0.9974998376044782,
+    "per_class": [
+      {
+        "class_id": 0,
+        "class_name": "dislike",
+        "precision": 0.9993328885923949,
+        "recall": 0.9986666666666667,
+        "f1_score": 0.9989996665555185,
+        "support": 3000
+      },
+      {
+        "class_id": 1,
+        "class_name": "fist",
+        "precision": 0.9980026631158455,
+        "recall": 0.9993333333333333,
+        "f1_score": 0.9986675549633578,
+        "support": 3000
+      },
+      {
+        "class_id": 2,
+        "class_name": "like",
+        "precision": 0.9996666666666667,
+        "recall": 0.9996666666666667,
+        "f1_score": 0.9996666666666667,
+        "support": 3000
+      },
+      {
+        "class_id": 3,
+        "class_name": "palm",
+        "precision": 0.9986662220740247,
+        "recall": 0.9983333333333333,
+        "f1_score": 0.9984997499583264,
+        "support": 3000
+      },
+      {
+        "class_id": 4,
+        "class_name": "peace",
+        "precision": 0.9973190348525469,
+        "recall": 0.992,
+        "f1_score": 0.9946524064171123,
+        "support": 3000
+      },
+      {
+        "class_id": 5,
+        "class_name": "peace_inverted",
+        "precision": 0.9960066555740432,
+        "recall": 0.9976666666666667,
+        "f1_score": 0.9968359700249791,
+        "support": 3000
+      },
+      {
+        "class_id": 6,
+        "class_name": "rock",
+        "precision": 0.9979966611018364,
+        "recall": 0.9963333333333333,
+        "f1_score": 0.9971643035863219,
+        "support": 3000
+      },
+      {
+        "class_id": 7,
+        "class_name": "stop",
+        "precision": 0.9983322214809873,
+        "recall": 0.9976666666666667,
+        "f1_score": 0.9979993331110371,
+        "support": 3000
+      },
+      {
+        "class_id": 8,
+        "class_name": "two_up",
+        "precision": 0.9926983073348822,
+        "recall": 0.997,
+        "f1_score": 0.9948445035755863,
+        "support": 3000
+      },
+      {
+        "class_id": 9,
+        "class_name": "two_up_inverted",
+        "precision": 0.9970039946737683,
+        "recall": 0.9983333333333333,
+        "f1_score": 0.9976682211858761,
+        "support": 3000
+      }
+    ],
+    "confusion_matrix": [
+      [
+        2996,
+        4,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        2998,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        2999,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2995,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        2976,
+        8,
+        3,
+        0,
+        12,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        2993,
+        0,
+        0,
+        0,
+        7
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        5,
+        0,
+        2989,
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0,
+        2993,
+        3,
+        0
+      ],
+      [
+        0,
+        1,
+        1,
+        0,
+        3,
+        0,
+        2,
+        0,
+        2991,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        1,
+        2995
+      ]
+    ],
+    "support": 30000,
+    "loss": 0.010302368496293682
+  },
+  "final_epoch": 22,
+  "final_validation_metrics": {
+    "accuracy": 0.9975,
+    "precision_macro": 0.9975028843189154,
+    "recall_macro": 0.9974999999999999,
+    "f1_macro": 0.99749967564983,
+    "per_class": [
+      {
+        "class_id": 0,
+        "class_name": "dislike",
+        "precision": 0.9996666666666667,
+        "recall": 0.9996666666666667,
+        "f1_score": 0.9996666666666667,
+        "support": 3000
+      },
+      {
+        "class_id": 1,
+        "class_name": "fist",
+        "precision": 0.9990003332222592,
+        "recall": 0.9993333333333333,
+        "f1_score": 0.9991668055324111,
+        "support": 3000
+      },
+      {
+        "class_id": 2,
+        "class_name": "like",
+        "precision": 0.9986679986679987,
+        "recall": 0.9996666666666667,
+        "f1_score": 0.9991670831251042,
+        "support": 3000
+      },
+      {
+        "class_id": 3,
+        "class_name": "palm",
+        "precision": 0.9976682211858761,
+        "recall": 0.9983333333333333,
+        "f1_score": 0.9980006664445185,
+        "support": 3000
+      },
+      {
+        "class_id": 4,
+        "class_name": "peace",
+        "precision": 0.9976549413735344,
+        "recall": 0.9926666666666667,
+        "f1_score": 0.9951545530492899,
+        "support": 3000
+      },
+      {
+        "class_id": 5,
+        "class_name": "peace_inverted",
+        "precision": 0.9963394342762063,
+        "recall": 0.998,
+        "f1_score": 0.9971690258118235,
+        "support": 3000
+      },
+      {
+        "class_id": 6,
+        "class_name": "rock",
+        "precision": 0.9983266398929049,
+        "recall": 0.9943333333333333,
+        "f1_score": 0.9963259853039411,
+        "support": 3000
+      },
+      {
+        "class_id": 7,
+        "class_name": "stop",
+        "precision": 0.9983316649983317,
+        "recall": 0.9973333333333333,
+        "f1_score": 0.9978322494580623,
+        "support": 3000
+      },
+      {
+        "class_id": 8,
+        "class_name": "two_up",
+        "precision": 0.9927007299270073,
+        "recall": 0.9973333333333333,
+        "f1_score": 0.9950116395078151,
+        "support": 3000
+      },
+      {
+        "class_id": 9,
+        "class_name": "two_up_inverted",
+        "precision": 0.9966722129783694,
+        "recall": 0.9983333333333333,
+        "f1_score": 0.9975020815986677,
+        "support": 3000
+      }
+    ],
+    "confusion_matrix": [
+      [
+        2999,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        2998,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        2999,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2995,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1,
+        0,
+        2978,
+        7,
+        3,
+        0,
+        11,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        2994,
+        0,
+        0,
+        0,
+        6
+      ],
+      [
+        0,
+        1,
+        1,
+        1,
+        5,
+        0,
+        2983,
+        0,
+        8,
+        1
+      ],
+      [
+        0,
+        0,
+        1,
+        6,
+        0,
+        0,
+        0,
+        2992,
+        1,
+        0
+      ],
+      [
+        0,
+        1,
+        1,
+        0,
+        2,
+        0,
+        1,
+        0,
+        2992,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        1,
+        2995
+      ]
+    ],
+    "support": 30000,
+    "loss": 0.011557440316904269
+  },
+  "outputs": {
+    "run_dir": "runs/resnet18_two_stage",
+    "checkpoint_dir": "checkpoints/resnet18_two_stage",
+    "history_path": "runs/resnet18_two_stage/training_history.csv",
+    "metrics_path": "runs/resnet18_two_stage/metrics.json",
+    "best_checkpoint_path": "checkpoints/resnet18_two_stage/best_model.pth",
+    "last_checkpoint_path": "checkpoints/resnet18_two_stage/last_model.pth"
+  }
+}

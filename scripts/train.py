@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import random
@@ -62,7 +63,7 @@ def main() -> int:
         raise SystemExit(f"Missing training dependency: {exc}") from exc
 
     from hand_gesture_rocm.data import build_image_folder
-    from hand_gesture_rocm.models import build_model, count_parameters
+    from hand_gesture_rocm.models import apply_training_mode, build_model, count_parameters
 
     seed = int(get_nested(config, "experiment.seed", 42))
     deterministic = bool(get_nested(config, "experiment.deterministic", True))
@@ -125,27 +126,16 @@ def main() -> int:
     architecture = str(get_nested(config, "model.architecture", "resnet18"))
     pretrained = bool(get_nested(config, "model.pretrained", True))
     training_mode = str(get_nested(config, "model.training_mode", "classifier_only"))
+    training_stages = build_training_stages(config, training_mode)
+    initial_training_mode = str(training_stages[0]["training_mode"])
     model = build_model(
         architecture=architecture,
         num_classes=NUM_CLASSES,
         pretrained=pretrained,
-        training_mode=training_mode,
+        training_mode=initial_training_mode,
     ).to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = build_optimizer(config, model)
-    amp_config = build_amp_config(config, device, torch)
-    scaler = torch.amp.GradScaler(
-        device.type,
-        enabled=amp_config["enabled"] and amp_config["grad_scaler"],
-    )
-    epochs = int(get_nested(config, "training.epochs", 30))
-    early_config = get_nested(config, "training.early_stopping", {}) or {}
-    monitor_name = str(early_config.get("monitor", "val_loss"))
-    monitor_mode = str(early_config.get("mode", infer_monitor_mode(monitor_name))).lower()
-    patience = int(early_config.get("patience", epochs))
-    min_delta = float(early_config.get("min_delta", 0.0))
-    scheduler = build_scheduler(config, optimizer, epochs, monitor_mode)
 
     history_path = run_dir / "training_history.csv"
     metrics_path = run_dir / "metrics.json"
@@ -155,12 +145,12 @@ def main() -> int:
     best_score: float | None = None
     best_epoch = 0
     best_validation: dict[str, Any] | None = None
-    epochs_without_improvement = 0
     history: list[dict[str, Any]] = []
 
     print(f"Experiment: {experiment_name}")
     print(f"Device: {device}")
-    print(f"Model: {architecture} ({training_mode})")
+    print(f"Model: {architecture} ({initial_training_mode})")
+    print(f"Protocol: {format_training_protocol(training_stages)}")
     print(f"Samples: {len(train_dataset):,} train / {len(val_dataset):,} val")
     print(
         "DataLoader: "
@@ -174,92 +164,144 @@ def main() -> int:
         f"cudnn_benchmark={getattr(torch.backends.cudnn, 'benchmark', None)} "
         f"cudnn_deterministic={getattr(torch.backends.cudnn, 'deterministic', None)}"
     )
-    print(
-        "Mixed precision: "
-        f"enabled={amp_config['enabled']} dtype={amp_config['dtype_name']} "
-        f"grad_scaler={amp_config['grad_scaler'] and scaler.is_enabled()}"
-    )
     print(f"Parameters: {count_parameters(model):,} total / {count_parameters(model, trainable_only=True):,} trainable")
     print(f"Outputs: {run_dir} and {checkpoint_dir}")
 
     stopped_early = False
+    stopped_stages: list[str] = []
     final_epoch = 0
     final_validation: dict[str, Any] | None = None
+    final_training_mode = initial_training_mode
+    final_monitor_name = "val_loss"
+    final_monitor_mode = "min"
 
-    for epoch in range(1, epochs + 1):
-        epoch_start = time.perf_counter()
-        epoch_learning_rate = current_learning_rate(optimizer)
-        train_start = time.perf_counter()
-        train_stats = run_epoch(model, train_loader, criterion, device, torch, optimizer, amp_config, scaler)
-        train_seconds = time.perf_counter() - train_start
-        val_start = time.perf_counter()
-        val_stats = run_epoch(model, val_loader, criterion, device, torch, optimizer=None, amp_config=amp_config)
-        val_seconds = time.perf_counter() - val_start
-        final_epoch = epoch
-        final_validation = val_stats
-
-        monitor_value = resolve_monitor_value(monitor_name, val_stats)
-        is_best = best_score is None or is_improvement(monitor_value, best_score, monitor_mode, min_delta)
-        if is_best:
-            best_score = monitor_value
-            best_epoch = epoch
-            best_validation = val_stats
-            epochs_without_improvement = 0
-        else:
-            epochs_without_improvement += 1
-
-        epoch_seconds = time.perf_counter() - epoch_start
-        row = build_history_row(
-            epoch,
-            epoch_learning_rate,
-            train_stats,
-            val_stats,
-            train_seconds,
-            val_seconds,
-            epoch_seconds,
-            is_best,
+    for stage_index, stage in enumerate(training_stages, start=1):
+        stage_name = str(stage["name"])
+        stage_training_mode = str(stage["training_mode"])
+        stage_config = config_for_stage(config, stage)
+        stage_epochs = int(stage["epochs"])
+        apply_training_mode(model, architecture, stage_training_mode)
+        optimizer = build_optimizer(stage_config, model)
+        amp_config = build_amp_config(stage_config, device, torch)
+        scaler = torch.amp.GradScaler(
+            device.type,
+            enabled=amp_config["enabled"] and amp_config["grad_scaler"],
         )
-        history.append(row)
-        write_history_csv(history_path, history)
-        scheduler_step(scheduler, monitor_value)
-
-        checkpoint_payload = build_checkpoint_payload(
-            config=config,
-            model=model,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            epoch=epoch,
-            architecture=architecture,
-            training_mode=training_mode,
-            pretrained=pretrained,
-            validation_stats=val_stats,
-            best_epoch=best_epoch,
-            best_score=best_score,
-            monitor_name=monitor_name,
-            monitor_mode=monitor_mode,
-        )
-        torch.save(checkpoint_payload, last_checkpoint_path)
-        if is_best:
-            torch.save(checkpoint_payload, best_checkpoint_path)
+        early_config = get_nested(stage_config, "training.early_stopping", {}) or {}
+        monitor_name = str(early_config.get("monitor", "val_loss"))
+        monitor_mode = str(early_config.get("mode", infer_monitor_mode(monitor_name))).lower()
+        patience = int(early_config.get("patience", stage_epochs))
+        min_delta = float(early_config.get("min_delta", 0.0))
+        scheduler = build_scheduler(stage_config, optimizer, stage_epochs, monitor_mode)
+        stage_best_score: float | None = None
+        stage_epochs_without_improvement = 0
+        final_training_mode = stage_training_mode
+        final_monitor_name = monitor_name
+        final_monitor_mode = monitor_mode
 
         print(
-            f"Epoch {epoch:03d}/{epochs:03d} "
-            f"train_loss={row['train_loss']:.4f} val_loss={row['val_loss']:.4f} "
-            f"val_acc={row['val_accuracy']:.4f} val_f1={row['val_f1_macro']:.4f} "
-            f"lr={row['learning_rate']:.6g} "
-            f"time={row['epoch_seconds']:.2f}s train={row['train_seconds']:.2f}s val={row['val_seconds']:.2f}s"
+            f"Stage {stage_index}/{len(training_stages)}: {stage_name} "
+            f"mode={stage_training_mode} epochs={stage_epochs} "
+            f"lr={current_learning_rate(optimizer):.6g} "
+            f"trainable={count_parameters(model, trainable_only=True):,}"
+        )
+        print(
+            "Mixed precision: "
+            f"enabled={amp_config['enabled']} dtype={amp_config['dtype_name']} "
+            f"grad_scaler={amp_config['grad_scaler'] and scaler.is_enabled()}"
         )
 
-        if epochs_without_improvement >= patience:
-            stopped_early = True
-            print(f"Early stopping at epoch {epoch} on {monitor_name}.")
-            break
+        for stage_epoch in range(1, stage_epochs + 1):
+            final_epoch += 1
+            epoch_start = time.perf_counter()
+            epoch_learning_rate = current_learning_rate(optimizer)
+            train_start = time.perf_counter()
+            train_stats = run_epoch(model, train_loader, criterion, device, torch, optimizer, amp_config, scaler)
+            train_seconds = time.perf_counter() - train_start
+            val_start = time.perf_counter()
+            val_stats = run_epoch(model, val_loader, criterion, device, torch, optimizer=None, amp_config=amp_config)
+            val_seconds = time.perf_counter() - val_start
+            final_validation = val_stats
+
+            monitor_value = resolve_monitor_value(monitor_name, val_stats)
+            is_stage_improvement = stage_best_score is None or is_improvement(
+                monitor_value,
+                stage_best_score,
+                monitor_mode,
+                min_delta,
+            )
+            if is_stage_improvement:
+                stage_best_score = monitor_value
+                stage_epochs_without_improvement = 0
+            else:
+                stage_epochs_without_improvement += 1
+
+            is_best_eligible = len(training_stages) == 1 or stage_index == len(training_stages)
+            is_best = is_best_eligible and (
+                best_score is None or is_improvement(monitor_value, best_score, monitor_mode, min_delta)
+            )
+            if is_best:
+                best_score = monitor_value
+                best_epoch = final_epoch
+                best_validation = val_stats
+
+            epoch_seconds = time.perf_counter() - epoch_start
+            row = build_history_row(
+                final_epoch,
+                epoch_learning_rate,
+                train_stats,
+                val_stats,
+                train_seconds,
+                val_seconds,
+                epoch_seconds,
+                is_best,
+            )
+            history.append(row)
+            write_history_csv(history_path, history)
+            scheduler_step(scheduler, monitor_value)
+
+            checkpoint_payload = build_checkpoint_payload(
+                config=config,
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                epoch=final_epoch,
+                architecture=architecture,
+                training_mode=stage_training_mode,
+                pretrained=pretrained,
+                validation_stats=val_stats,
+                best_epoch=best_epoch,
+                best_score=best_score,
+                monitor_name=monitor_name,
+                monitor_mode=monitor_mode,
+                stage_name=stage_name,
+                stage_epoch=stage_epoch,
+                training_protocol=training_stages,
+            )
+            torch.save(checkpoint_payload, last_checkpoint_path)
+            if is_best:
+                torch.save(checkpoint_payload, best_checkpoint_path)
+
+            print(
+                f"Epoch {final_epoch:03d} "
+                f"stage={stage_name} {stage_epoch:03d}/{stage_epochs:03d} "
+                f"train_loss={row['train_loss']:.4f} val_loss={row['val_loss']:.4f} "
+                f"val_acc={row['val_accuracy']:.4f} val_f1={row['val_f1_macro']:.4f} "
+                f"lr={row['learning_rate']:.6g} "
+                f"time={row['epoch_seconds']:.2f}s train={row['train_seconds']:.2f}s val={row['val_seconds']:.2f}s"
+            )
+
+            if stage_epochs_without_improvement >= patience:
+                stopped_early = True
+                stopped_stages.append(stage_name)
+                print(f"Early stopping stage {stage_name} at epoch {stage_epoch} on {monitor_name}.")
+                break
 
     metrics = build_metrics_json(
         config=config,
         experiment_name=experiment_name,
         architecture=architecture,
-        training_mode=training_mode,
+        training_mode=final_training_mode,
         pretrained=pretrained,
         model=model,
         best_epoch=best_epoch,
@@ -267,9 +309,11 @@ def main() -> int:
         best_validation=best_validation,
         final_epoch=final_epoch,
         final_validation=final_validation,
-        monitor_name=monitor_name,
-        monitor_mode=monitor_mode,
+        monitor_name=final_monitor_name,
+        monitor_mode=final_monitor_mode,
         stopped_early=stopped_early,
+        stopped_stages=stopped_stages,
+        training_protocol=training_stages,
         train_samples=len(train_dataset),
         val_samples=len(val_dataset),
         run_dir=run_dir,
@@ -332,6 +376,69 @@ def limit_samples_per_class(dataset, max_samples_per_class: Any, seed: int, subs
         indices.extend(class_indices[:limit])
     rng.shuffle(indices)
     return subset_cls(dataset, indices)
+
+
+def build_training_stages(config: dict[str, Any], default_training_mode: str) -> list[dict[str, Any]]:
+    raw_stages = get_nested(config, "training.stages")
+    base_training = copy.deepcopy(get_nested(config, "training", {}) or {})
+    base_training.pop("stages", None)
+
+    if not raw_stages:
+        stage = copy.deepcopy(base_training)
+        stage.setdefault("name", default_training_mode)
+        stage.setdefault("training_mode", default_training_mode)
+        stage.setdefault("epochs", get_nested(config, "training.epochs", 30))
+        return [normalize_training_stage(stage, base_training, 1)]
+
+    if not isinstance(raw_stages, list):
+        raise ValueError("training.stages must be a list when defined.")
+
+    stages: list[dict[str, Any]] = []
+    for index, raw_stage in enumerate(raw_stages, start=1):
+        if not isinstance(raw_stage, dict):
+            raise ValueError("Each training stage must be a mapping.")
+        stage = copy.deepcopy(base_training)
+        stage.update(copy.deepcopy(raw_stage))
+        stages.append(normalize_training_stage(stage, base_training, index))
+    return stages
+
+
+def normalize_training_stage(stage: dict[str, Any], base_training: dict[str, Any], index: int) -> dict[str, Any]:
+    training_mode = str(stage.get("training_mode", stage.get("name", "classifier_only")))
+    stage.setdefault("name", training_mode)
+    stage["training_mode"] = training_mode
+    stage["epochs"] = int(stage.get("epochs", base_training.get("epochs", 30)))
+    if stage["epochs"] <= 0:
+        raise ValueError(f"Stage {index} must define epochs > 0.")
+
+    if "learning_rate_multiplier" in stage:
+        base_learning_rate = float(stage.get("learning_rate", base_training.get("learning_rate", 1e-3)))
+        stage["learning_rate"] = base_learning_rate * float(stage["learning_rate_multiplier"])
+    else:
+        stage.setdefault("learning_rate", base_training.get("learning_rate", 1e-3))
+
+    stage.setdefault("optimizer", base_training.get("optimizer", "AdamW"))
+    stage.setdefault("weight_decay", base_training.get("weight_decay", 1e-4))
+    stage.setdefault("scheduler", base_training.get("scheduler", "ReduceLROnPlateau"))
+    stage.setdefault("early_stopping", copy.deepcopy(base_training.get("early_stopping", {})))
+    stage.setdefault("mixed_precision", copy.deepcopy(base_training.get("mixed_precision", False)))
+    return stage
+
+
+def config_for_stage(config: dict[str, Any], stage: dict[str, Any]) -> dict[str, Any]:
+    stage_config = copy.deepcopy(config)
+    stage_training = copy.deepcopy(stage)
+    stage_training.pop("name", None)
+    stage_training.pop("training_mode", None)
+    stage_config["training"] = stage_training
+    return stage_config
+
+
+def format_training_protocol(stages: list[dict[str, Any]]) -> str:
+    return " -> ".join(
+        f"{stage['name']}[{stage['training_mode']}, {stage['epochs']}e, lr={float(stage['learning_rate']):.6g}]"
+        for stage in stages
+    )
 
 
 def build_optimizer(config: dict[str, Any], model):
@@ -512,9 +619,15 @@ def build_checkpoint_payload(
     best_score: float | None,
     monitor_name: str,
     monitor_mode: str,
+    stage_name: str | None = None,
+    stage_epoch: int | None = None,
+    training_protocol: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "epoch": epoch,
+        "global_epoch": epoch,
+        "stage_name": stage_name,
+        "stage_epoch": stage_epoch,
         "architecture": architecture,
         "training_mode": training_mode,
         "pretrained": pretrained,
@@ -531,6 +644,7 @@ def build_checkpoint_payload(
         "best_score": best_score,
         "monitor_name": monitor_name,
         "monitor_mode": monitor_mode,
+        "training_protocol": training_protocol or [],
         "config": config,
     }
 
@@ -550,6 +664,8 @@ def build_metrics_json(
     monitor_name: str,
     monitor_mode: str,
     stopped_early: bool,
+    stopped_stages: list[str],
+    training_protocol: list[dict[str, Any]],
     train_samples: int,
     val_samples: int,
     run_dir: Path,
@@ -594,10 +710,12 @@ def build_metrics_json(
             "deterministic": get_nested(config, "experiment.deterministic", True),
             "mixed_precision": get_nested(config, "training.mixed_precision", False),
         },
+        "training_protocol": training_protocol,
         "early_stopping": {
             "monitor": monitor_name,
             "mode": monitor_mode,
             "stopped_early": stopped_early,
+            "stopped_stages": stopped_stages,
         },
         "best_epoch": best_epoch,
         "best_score": best_score,

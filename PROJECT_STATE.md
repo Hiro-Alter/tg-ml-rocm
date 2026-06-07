@@ -2,14 +2,16 @@
 
 ## Fase actual
 
-Fase 4.5 cerrada: diagnostico de rendimiento ROCm/DataLoader completado.
-Siguiente paso: retomar Fase 4 con tuning ResNet18 corregido.
+Fase 4: ResNet18 y MobileNetV3 Small finales de dos etapas entrenados.
+Siguiente paso: evaluacion test de ambos modelos.
 
 ## Implementado
 
 - Constantes inmutables de clases, tamano 224 e ImageNet mean/std.
-- Factoria de modelos para ResNet18 y MobileNetV3 Small con dos modos:
-  `classifier_only` y `full_finetuning`.
+- Factoria de modelos para ResNet18 y MobileNetV3 Small con tres modos:
+  `classifier_only`, `partial_finetuning` y `full_finetuning`.
+- `partial_finetuning` descongela `layer4` + `fc` en ResNet18, y
+  `classifier` + los ultimos 3 bloques de `features` en MobileNetV3 Small.
 - Transformaciones base para ImageFolder con salida de 3 canales y
   normalizacion ImageNet.
 - Carga minima de configuraciones YAML.
@@ -36,12 +38,20 @@ Siguiente paso: retomar Fase 4 con tuning ResNet18 corregido.
   `experiment.deterministic`.
 - `scripts/train.py` soporta AMP opcional con
   `training.mixed_precision.enabled`, `dtype` y `grad_scaler`.
+- `scripts/train.py` soporta `training.stages` para entrenar protocolos
+  secuenciales sobre el mismo modelo.
+- `scripts/tune.py` genera trials ResNet18 de dos etapas:
+  `classifier_only` y luego `partial_finetuning`.
 - PyTorch ROCm instalado en `.venv`:
   `torch==2.11.0+rocm7.2`, `torchvision==0.26.0+rocm7.2` y
   `torchaudio==2.11.0+rocm7.2`.
 - Config diagnostica `configs/perf_resnet18_rocm.yaml`.
 - Script `scripts/perf_diagnostics.py` para matriz corta de rendimiento con
   monitoreo CPU/RAM/GPU/VRAM/disco.
+- Documento formal `PERFORMANCE_DIAGNOSTIC_PHASE_4_5.md` con descripcion,
+  resultados y conclusion de la fase 4.5.
+- Documento `FINAL_TRAINING_ANALYSIS.md` con analisis del entrenamiento final
+  de ResNet18 y MobileNetV3 Small.
 
 ## Comandos funcionales
 
@@ -76,6 +86,28 @@ python scripts/perf_diagnostics.py --config configs/perf_resnet18_rocm.yaml --dr
   batch 128 = 198.09 s / 60.58 img/s.
 - `configs/tuning_resnet18.yaml` conserva `batch_size=32` para continuar
   tuning por mejor throughput observado.
+- `configs/tuning_resnet18.yaml` ya no usa `full_finetuning` ni referencia
+  `data.test_dir`; cada trial ejecuta:
+  `classifier_only` 3 epocas con `lr=learning_rate`, luego
+  `partial_finetuning` 5 epocas con `lr=learning_rate*0.1`.
+- En protocolos de varias etapas, `best_model.pth` y la metrica de seleccion
+  se actualizan solo durante la ultima etapa para evitar seleccionar un trial
+  por la etapa `classifier_only`.
+- `configs/resnet18_finetuning.yaml` y `configs/mobilenetv3_finetuning.yaml`
+  quedaron como configs finales de dos etapas sobre dataset completo; sus LR
+  ya usan los mejores hiperparametros del tuning ResNet18.
+- Tuning ResNet18 dos etapas completado para 6 trials. Mejor trial:
+  `learning_rate=0.001`, `partial_finetuning lr=0.0001`,
+  `weight_decay=0.0001`, `val_loss=0.0604`, `val_accuracy=0.9825`,
+  `val_f1_macro=0.9826`.
+- Entrenamiento final ResNet18 dos etapas completado sobre dataset completo:
+  231,900 train / 30,000 val. Mejor checkpoint en epoca 15:
+  `val_loss=0.0103`, `val_accuracy=0.9975`, `val_f1_macro=0.9975`.
+  Early stopping en `partial_finetuning` al llegar a epoca global 22.
+- Entrenamiento final MobileNetV3 Small dos etapas completado sobre dataset
+  completo: 231,900 train / 30,000 val. Mejor checkpoint en epoca 12:
+  `val_loss=0.0156`, `val_accuracy=0.9956`, `val_f1_macro=0.9956`.
+  Early stopping en `partial_finetuning` al llegar a epoca global 19.
 - `scripts/tune.py --dry-run --max-trials 1` fue verificado; solo genero
   archivos ignorados bajo `runs/`.
 - `scripts/check_rocm.py` verificado correctamente fuera del sandbox:
@@ -111,21 +143,16 @@ python scripts/perf_diagnostics.py --config configs/perf_resnet18_rocm.yaml --dr
    `runs/tuning_resnet18`: fueron preliminares con subset deterministico.
 3. La fase 4.5 concluyo con esta politica predeterminada:
    `baseline` FP32, batch 32, `num_workers=4`, sin MIOpen y sin AMP.
-4. Reanudar tuning ResNet18 con el protocolo corregido:
+4. Evaluar ambos checkpoints finales sobre `data/test`:
 
 ```bash
 source .venv/bin/activate
 python scripts/check_rocm.py
-python scripts/tune.py --config configs/tuning_resnet18.yaml --rerun-existing --stop-on-failure
+python scripts/evaluate.py --checkpoint checkpoints/resnet18_two_stage/best_model.pth --data data/test
+python scripts/evaluate.py --checkpoint checkpoints/mobilenetv3_two_stage/best_model.pth --data data/test
 ```
 
-5. Solo si se quiere repetir la matriz diagnostica completa de 60 trials:
-
-```bash
-python scripts/perf_diagnostics.py --config configs/perf_resnet18_rocm.yaml --yes --stop-on-failure
-```
-
-6. La ejecucion debe hacerse con acceso real a ROCm `/dev/kfd`; dentro del
+5. La ejecucion con GPU requiere acceso real a ROCm `/dev/kfd`; dentro del
    sandbox PyTorch no ve la GPU.
-7. Al terminar el grid, registrar en `EXPERIMENTS.md` los trials corregidos,
-   elegir la mejor politica y luego aplicarla a MobileNetV3 Small.
+6. Registrar los resultados test en `EXPERIMENTS.md`, `PROJECT_STATE.md`,
+   `TODO.md` y `CHANGELOG.md`.

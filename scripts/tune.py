@@ -30,6 +30,7 @@ SUMMARY_FIELDS = [
     "optimizer",
     "scheduler",
     "epochs",
+    "protocol",
     "monitor",
     "monitor_mode",
     "selection_metric",
@@ -131,8 +132,9 @@ def build_trials(config: dict[str, Any], run_dir: Path, checkpoint_dir: Path) ->
     weight_decays = as_list(get_nested(config, "tuning.weight_decay", [get_nested(config, "training.weight_decay", 1e-4)]))
     optimizer = str(get_nested(config, "tuning.optimizer", get_nested(config, "training.optimizer", "AdamW")))
     scheduler = str(get_nested(config, "tuning.scheduler", get_nested(config, "training.scheduler", "ReduceLROnPlateau")))
-    epochs = int(get_nested(config, "tuning.epochs_per_trial", get_nested(config, "training.epochs", 20)))
     early_stopping = copy.deepcopy(get_nested(config, "tuning.early_stopping", get_nested(config, "training.early_stopping", {})) or {})
+    mixed_precision = copy.deepcopy(get_nested(config, "tuning.mixed_precision", get_nested(config, "training.mixed_precision", False)))
+    base_stages = copy.deepcopy(get_nested(config, "tuning.stages", []))
     base_name = str(get_nested(config, "experiment.name", "tuning"))
 
     trials: list[dict[str, Any]] = []
@@ -141,13 +143,24 @@ def build_trials(config: dict[str, Any], run_dir: Path, checkpoint_dir: Path) ->
         trial_config = copy.deepcopy(config)
         trial_config.pop("tuning", None)
         trial_config.setdefault("experiment", {})["name"] = trial_name
+        trial_config.setdefault("model", {})["training_mode"] = "classifier_only"
+        stages = build_trial_stages(
+            base_stages=base_stages,
+            learning_rate=float(learning_rate),
+            weight_decay=float(weight_decay),
+            optimizer=optimizer,
+            scheduler=scheduler,
+            early_stopping=early_stopping,
+            mixed_precision=mixed_precision,
+        )
         trial_config["training"] = {
-            "epochs": epochs,
             "optimizer": optimizer,
             "learning_rate": float(learning_rate),
             "weight_decay": float(weight_decay),
             "scheduler": scheduler,
+            "mixed_precision": mixed_precision,
             "early_stopping": early_stopping,
+            "stages": stages,
         }
         trial_config["outputs"] = {
             "run_dir": str(run_dir / trial_name),
@@ -160,13 +173,58 @@ def build_trials(config: dict[str, Any], run_dir: Path, checkpoint_dir: Path) ->
                 "weight_decay": float(weight_decay),
                 "optimizer": optimizer,
                 "scheduler": scheduler,
-                "epochs": epochs,
+                "epochs": sum(int(stage["epochs"]) for stage in stages),
+                "protocol": format_protocol(stages),
                 "monitor": str(early_stopping.get("monitor", "val_loss")),
                 "monitor_mode": str(early_stopping.get("mode", infer_metric_mode(str(early_stopping.get("monitor", "val_loss"))))),
                 "config": trial_config,
             }
         )
     return trials
+
+
+def build_trial_stages(
+    base_stages: list[dict[str, Any]],
+    learning_rate: float,
+    weight_decay: float,
+    optimizer: str,
+    scheduler: str,
+    early_stopping: dict[str, Any],
+    mixed_precision: Any,
+) -> list[dict[str, Any]]:
+    stages = base_stages or [
+        {
+            "name": "classifier_only",
+            "training_mode": "classifier_only",
+            "epochs": 3,
+            "learning_rate_multiplier": 1.0,
+        },
+        {
+            "name": "partial_finetuning",
+            "training_mode": "partial_finetuning",
+            "epochs": 5,
+            "learning_rate_multiplier": 0.1,
+        },
+    ]
+    trial_stages: list[dict[str, Any]] = []
+    for stage in stages:
+        trial_stage = copy.deepcopy(stage)
+        multiplier = float(trial_stage.pop("learning_rate_multiplier", 1.0))
+        trial_stage["learning_rate"] = learning_rate * multiplier
+        trial_stage["weight_decay"] = weight_decay
+        trial_stage["optimizer"] = optimizer
+        trial_stage["scheduler"] = scheduler
+        trial_stage["early_stopping"] = copy.deepcopy(early_stopping)
+        trial_stage["mixed_precision"] = copy.deepcopy(mixed_precision)
+        trial_stages.append(trial_stage)
+    return trial_stages
+
+
+def format_protocol(stages: list[dict[str, Any]]) -> str:
+    return " -> ".join(
+        f"{stage['name']}:{stage['training_mode']}:{stage['epochs']}e:lr={float(stage['learning_rate']):.6g}"
+        for stage in stages
+    )
 
 
 def build_planned_summary(
@@ -184,6 +242,7 @@ def build_planned_summary(
         "optimizer": trial["optimizer"],
         "scheduler": trial["scheduler"],
         "epochs": trial["epochs"],
+        "protocol": trial["protocol"],
         "monitor": trial["monitor"],
         "monitor_mode": trial["monitor_mode"],
         "selection_metric": selection_metric,

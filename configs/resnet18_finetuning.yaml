@@ -1,11 +1,12 @@
 experiment:
-  name: resnet18_finetuning
+  name: resnet18_two_stage
   seed: 42
+  deterministic: false
 
 model:
   architecture: resnet18
   pretrained: true
-  training_mode: full_finetuning
+  training_mode: classifier_only
 
 data:
   train_dir: data/train
@@ -13,19 +14,34 @@ data:
   test_dir: data/test
   batch_size: 32
   num_workers: 4
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 2
   grayscale_to_rgb: true
 
 training:
-  epochs: 30
   optimizer: AdamW
-  learning_rate: 0.0003
+  learning_rate: 0.001
   weight_decay: 0.0001
   scheduler: ReduceLROnPlateau
+  mixed_precision:
+    enabled: false
+    dtype: float16
+    grad_scaler: true
+  stages:
+    - name: classifier_only
+      training_mode: classifier_only
+      epochs: 5
+      learning_rate_multiplier: 1.0
+    - name: partial_finetuning
+      training_mode: partial_finetuning
+      epochs: 25
+      learning_rate_multiplier: 0.1
   early_stopping:
     monitor: val_loss
     mode: min
     patience: 7
 
 outputs:
-  run_dir: runs/resnet18_finetuning
-  checkpoint_dir: checkpoints/resnet18_finetuning
+  run_dir: runs/resnet18_two_stage
+  checkpoint_dir: checkpoints/resnet18_two_stage
